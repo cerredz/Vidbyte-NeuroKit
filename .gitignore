@@ -1,0 +1,11 @@
+.pytest_cache/
+.venv/
+__pycache__/
+*.pyc
+
+cache/
+outputs/
+dist/
+build/
+src/*.egg-info/
+_upstream_tribev2/

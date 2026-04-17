@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tribe-setup"
+version = "0.1.0"
+description = "Minimal runner wrapper around Meta's Tribe v2 model."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "moviepy>=2.2.1",
+  "numpy>=2.2,<3",
+  "pandas>=2.2,<3",
+  "tribev2 @ git+https://github.com/facebookresearch/tribev2.git",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [".", "packages/sdk/src"]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = [".", "packages/sdk/src"]

@@ -137,11 +137,60 @@ def test_runner_run_batch_preserves_input_order_and_supports_mixed_types(tmp_pat
     backend = FakeTribeBackend()
     runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
 
-    results = runner.run_batch([video_path, audio_path, text_path], verbose=False, max_workers=2)
+    results = runner.run_batch([video_path, audio_path, text_path], verbose=False, parallel=True, max_workers=2)
 
     assert [result.input_path for result in results] == [video_path.resolve(), audio_path.resolve(), text_path.resolve()]
     assert [result.input_kind.value for result in results] == ["video", "audio", "text"]
     assert len(backend.predict_calls) == 3
+
+
+def test_runner_run_batch_is_sequential_by_default(tmp_path: Path, monkeypatch) -> None:
+    audio_path = tmp_path / "sample.wav"
+    text_path = tmp_path / "sample.txt"
+    audio_path.write_bytes(b"audio")
+    text_path.write_text("hello", encoding="utf-8")
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=FakeTribeBackend())
+
+    def fail_if_thread_pool_created(*args, **kwargs):
+        raise AssertionError("ThreadPoolExecutor should not be created for default sequential batches.")
+
+    monkeypatch.setattr("services.inference.tribe_runner.ThreadPoolExecutor", fail_if_thread_pool_created)
+
+    results = runner.run_batch([audio_path, text_path], verbose=False)
+
+    assert [result.input_path for result in results] == [audio_path.resolve(), text_path.resolve()]
+
+
+def test_runner_run_batch_max_workers_preserves_parallel_backwards_compatibility(tmp_path: Path, monkeypatch) -> None:
+    audio_path = tmp_path / "sample.wav"
+    text_path = tmp_path / "sample.txt"
+    audio_path.write_bytes(b"audio")
+    text_path.write_text("hello", encoding="utf-8")
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=FakeTribeBackend())
+    observed: dict[str, int | list[Path]] = {}
+
+    class FakeExecutor:
+        def __init__(self, *, max_workers: int) -> None:
+            observed["max_workers"] = max_workers
+
+        def __enter__(self) -> "FakeExecutor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def map(self, fn, iterable):
+            items = list(iterable)
+            observed["items"] = [Path(item) for item in items]
+            return [fn(item) for item in items]
+
+    monkeypatch.setattr("services.inference.tribe_runner.ThreadPoolExecutor", FakeExecutor)
+
+    results = runner.run_batch([audio_path, text_path], verbose=False, max_workers=2)
+
+    assert [result.input_path for result in results] == [audio_path.resolve(), text_path.resolve()]
+    assert observed["max_workers"] == 2
+    assert observed["items"] == [audio_path, text_path]
 
 
 def test_runner_translate_returns_requested_outputs(tmp_path: Path) -> None:

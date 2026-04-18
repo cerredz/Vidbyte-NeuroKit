@@ -64,7 +64,15 @@ class TribeRunner:
             self.save_output(result=result, output_path=resolved_save_to)
         return result
 
-    def run_batch(self, inputs: Sequence[str | Path], *, verbose: bool | None = None, save_to: str | Path | None = None, max_workers: int | None = None) -> list[PredictionResult]:
+    def run_batch(
+        self,
+        inputs: Sequence[str | Path],
+        *,
+        verbose: bool | None = None,
+        save_to: str | Path | None = None,
+        max_workers: int | None = None,
+        parallel: bool = False,
+    ) -> list[PredictionResult]:
         if isinstance(inputs, (str, Path)):
             raise TypeError("run_batch expects a sequence of input paths, not a single path.")
 
@@ -74,12 +82,17 @@ class TribeRunner:
 
         resolved_verbose = self.workflow.resolve_verbose(verbose)
         resolved_save_to = self.workflow.resolve_save_to(save_to)
-        worker_count = max_workers or min(len(input_list), 32)
-        if worker_count <= 0:
-            raise ValueError("max_workers must be greater than zero.")
+        use_parallel = parallel or max_workers is not None
 
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            results = list(executor.map(lambda input_path: self.run(input_path, verbose=resolved_verbose, save_to=None), input_list))
+        if use_parallel:
+            worker_count = max_workers or min(len(input_list), 32)
+            if worker_count <= 0:
+                raise ValueError("max_workers must be greater than zero.")
+
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                results = list(executor.map(lambda input_path: self.run(input_path, verbose=resolved_verbose, save_to=None), input_list))
+        else:
+            results = [self.run(input_path, verbose=resolved_verbose, save_to=None) for input_path in input_list]
 
         if resolved_save_to is not None:
             base_output_dir = self.file_manager.ensure_directory(resolved_save_to)

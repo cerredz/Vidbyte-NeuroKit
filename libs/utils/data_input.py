@@ -11,6 +11,7 @@ from libs.enums import (
     AUDIO_SUFFIX_VALUES,
     IMAGE_SUFFIX_VALUES,
     SUPPORTED_SUFFIX_VALUES,
+    TEXT_SUFFIX_VALUES,
     VIDEO_SUFFIX_VALUES,
     InputKind,
 )
@@ -45,6 +46,8 @@ class DataInput:
             return InputKind.VIDEO
         if suffix in IMAGE_SUFFIX_VALUES:
             return InputKind.IMAGE
+        if suffix in TEXT_SUFFIX_VALUES:
+            return InputKind.TEXT
         raise ValueError(
             "Unsupported input type. "
             f"Expected one of {sorted(SUPPORTED_SUFFIX_VALUES)}, got '{suffix or '<none>'}'."
@@ -73,6 +76,14 @@ class DataInput:
                 model_path=self.path,
                 kind=self.kind,
                 model_kwargs={"video_path": str(self.path)},
+            )
+
+        if self.kind is InputKind.TEXT:
+            return PreparedInput(
+                original_path=self.path,
+                model_path=self.path,
+                kind=self.kind,
+                model_kwargs={"text_path": str(self.path)},
             )
 
         image_video_path = self._convert_image_to_video(

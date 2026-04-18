@@ -1,11 +1,49 @@
-from tribe_setup.models import InputKind, PredictionResult, PreparedInput, TribeConfig
+from tribe_setup.models import (
+    CognitiveLoadScore,
+    ComparisonMetric,
+    ComparisonResult,
+    EngagementSegmentation,
+    ExportArtifact,
+    ExportFormat,
+    ExportPayload,
+    InputKind,
+    LanguageProcessingScore,
+    NormalizedPredictions,
+    PeakMoments,
+    PredictionDiff,
+    PredictionResult,
+    PreparedInput,
+    RegionActivations,
+    TemporalCurve,
+    TranslationOutputKey,
+    TribeConfig,
+    TribePredictions,
+    TribeSegments,
+)
 
 __all__ = [
+    "CognitiveLoadScore",
+    "ComparisonMetric",
+    "ComparisonResult",
     "DataInput",
+    "EngagementSegmentation",
+    "ExportArtifact",
+    "ExportFormat",
+    "ExportPayload",
     "InputKind",
+    "LanguageProcessingScore",
+    "NormalizedPredictions",
+    "PeakMoments",
+    "PredictionDiff",
     "PredictionResult",
     "PreparedInput",
+    "RegionActivations",
+    "TemporalCurve",
+    "TranslationOutputKey",
     "TribeConfig",
+    "TribePredictions",
+    "TribeRunnerUtils",
+    "TribeSegments",
     "TribeRunner",
 ]
 
@@ -19,4 +57,8 @@ def __getattr__(name: str):
         from services.inference import TribeRunner
 
         return TribeRunner
+    if name == "TribeRunnerUtils":
+        from libs.utils import TribeRunnerUtils
+
+        return TribeRunnerUtils
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

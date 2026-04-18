@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 import pandas as pd
 
 from libs.config import ConfigLoader
-from libs.dataclasses import PredictionResult, TribeConfig, TribePredictions, TribeSegments
+from libs.dataclasses import PredictionResult, TranslationReport, TribeConfig, TribePredictions, TribeSegments
 from libs.enums import ComparisonMetric, ExportFormat, TranslationOutputKey
 from libs.protocols import SupportsTribeModel
 from libs.utils import DataInput, LocalFileManager, TribeRunnerUtils
@@ -175,3 +175,29 @@ class TribeRunner:
                     raise ValueError(f"Unsupported translation output '{output_key.value}'.")
 
         return translated
+
+    def report(
+        self,
+        result_or_predictions: PredictionResult | TribePredictions,
+        *,
+        segments: TribeSegments | Sequence[Any] | None = None,
+        options: Mapping[TranslationOutputKey | str, Mapping[str, Any]] | None = None,
+    ) -> TranslationReport:
+        translated = self.translate(
+            result_or_predictions,
+            list(TranslationOutputKey),
+            segments=segments,
+            options=options,
+        )
+        return TranslationReport(
+            temporal=translated[TranslationOutputKey.TEMPORAL.value],
+            peak=translated[TranslationOutputKey.PEAK.value],
+            regions=translated[TranslationOutputKey.REGIONS.value],
+            cognitive=translated[TranslationOutputKey.COGNITIVE.value],
+            language=translated[TranslationOutputKey.LANGUAGE.value],
+            compare=translated[TranslationOutputKey.COMPARE.value],
+            diff=translated[TranslationOutputKey.DIFF.value],
+            normalize=translated[TranslationOutputKey.NORMALIZE.value],
+            segment=translated[TranslationOutputKey.SEGMENT.value],
+            export=translated[TranslationOutputKey.EXPORT.value],
+        )

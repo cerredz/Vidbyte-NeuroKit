@@ -59,7 +59,7 @@ class CliParserValue(StrEnum):
     COMMAND_GROUP_ARG = "task"
     INLINE_JSON_ARG = "--json"
     JSON_PAYLOAD_DEST = "json_payload"
-    PROGRAM_NAME = "tribe-cli"
+    PROGRAM_NAME = "vidbyte-neuro-kit"
 
 
 COMMANDS = tuple(sorted(command.value for command in CliCommand))

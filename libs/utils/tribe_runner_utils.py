@@ -1,239 +1,208 @@
 from __future__ import annotations
 
-import csv
-import json
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Callable, Sequence
 
 import numpy as np
-import pandas as pd
 
-
-PFC_REGIONS: tuple[str, ...] = (
-    "G_front_sup",
-    "G_front_middle",
-    "G_front_inf-Opercular",
-    "G_front_inf-Triangul",
+from libs.dataclasses import (
+    CognitiveLoadScore,
+    ComparisonInput,
+    ComparisonResult,
+    EngagementSegmentation,
+    EngagementWindow,
+    ExportArtifact,
+    ExportPayload,
+    LanguageProcessingScore,
+    NormalizedPredictions,
+    PeakMoment,
+    PeakMoments,
+    PredictionDiff,
+    RegionActivation,
+    RegionActivations,
+    TemporalCurve,
+    TribePredictions,
+    TribeSegments,
+)
+from libs.enums import (
+    LANGUAGE_REGIONS,
+    PFC_REGIONS,
+    ComparisonMetric,
+    ComparisonWinner,
+    DestrieuxRegion,
+    ExportFormat,
+)
+from libs.utils.local_file_exporter import LocalFileExporter
+from libs.utils.tribe_utils import (
+    coerce_region_name,
+    normalize_to_percentage,
+    validate_timestep_alignment,
+    validate_vertex_indices,
 )
 
-LANGUAGE_REGIONS: tuple[str, ...] = (
-    "G_front_inf-Opercular",
-    "G_front_inf-Triangul",
-    "G_temp_sup-G_T_transv",
-    "G_temp_sup-Plan_tempo",
-    "S_temporal_sup",
-)
 
 ROIIndexResolver = Callable[[str], Sequence[int]]
 
 
 class TribeRunnerUtils:
-    def __init__(self, roi_index_resolver: ROIIndexResolver | None = None, atlas_data_dir: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        roi_index_resolver: ROIIndexResolver | None = None,
+        atlas_data_dir: str | Path | None = None,
+        file_exporter: LocalFileExporter | None = None,
+    ) -> None:
         self._roi_index_resolver = roi_index_resolver
         self._atlas_data_dir = Path(atlas_data_dir).expanduser().resolve() if atlas_data_dir is not None else None
         self._roi_lookup: dict[str, np.ndarray] | None = None
+        self.file_exporter = file_exporter or LocalFileExporter()
 
-    def get_temporal_curve(self, preds: np.ndarray, segments: pd.DataFrame | Sequence[Any]) -> dict[str, list[float]]:
-        predictions = self._ensure_predictions(preds)
-        segment_frame = self._segments_to_frame(segments)
-        self._validate_timestep_alignment(predictions, segment_frame)
+    def get_temporal_curve(self, predictions: TribePredictions, segments: TribeSegments) -> TemporalCurve:
+        validate_timestep_alignment(predictions, segments)
+        curve = predictions.values.mean(axis=1)
+        return TemporalCurve(
+            timestamps=segments.timestamps,
+            scores=tuple(float(value) for value in normalize_to_percentage(curve).tolist()),
+            raw=tuple(float(value) for value in curve.astype(float).tolist()),
+        )
 
-        curve = predictions.mean(axis=1)
-        curve_normalized = self._normalize_to_percentage(curve)
-        timestamps = segment_frame["onset"].to_numpy(dtype=float)
-        return {
-            "timestamps": timestamps.tolist(),
-            "scores": curve_normalized.tolist(),
-            "raw": curve.astype(float).tolist(),
-        }
-
-    def get_peak_moments(self, preds: np.ndarray, segments: pd.DataFrame | Sequence[Any], top_n: int = 3) -> list[dict[str, float | int]]:
+    def get_peak_moments(self, predictions: TribePredictions, segments: TribeSegments, top_n: int = 3) -> PeakMoments:
         if top_n <= 0:
             raise ValueError("top_n must be greater than zero.")
 
-        curve_data = self.get_temporal_curve(preds, segments)
-        scores = np.asarray(curve_data["scores"], dtype=float)
-        timestamps = np.asarray(curve_data["timestamps"], dtype=float)
+        curve = self.get_temporal_curve(predictions, segments)
+        scores = np.asarray(curve.scores, dtype=float)
+        timestamps = np.asarray(curve.timestamps, dtype=float)
         top_indices = np.argsort(scores)[::-1][:top_n]
-        return [
-            {
-                "rank": rank + 1,
-                "timestamp_s": float(timestamps[index]),
-                "score": float(scores[index]),
-            }
-            for rank, index in enumerate(top_indices)
-        ]
+        return PeakMoments(
+            items=tuple(
+                PeakMoment(rank=rank + 1, timestamp_s=float(timestamps[index]), score=float(scores[index]))
+                for rank, index in enumerate(top_indices)
+            )
+        )
 
     def get_region_activations(
         self,
-        preds: np.ndarray,
-        segments: pd.DataFrame | Sequence[Any],
-        regions: Sequence[str],
-    ) -> dict[str, dict[str, Any]]:
-        predictions = self._ensure_predictions(preds)
-        segment_frame = self._segments_to_frame(segments)
-        self._validate_timestep_alignment(predictions, segment_frame)
-        timestamps = segment_frame["onset"].to_numpy(dtype=float).tolist()
-
-        result: dict[str, dict[str, Any]] = {}
+        predictions: TribePredictions,
+        segments: TribeSegments,
+        regions: Sequence[DestrieuxRegion | str],
+    ) -> RegionActivations:
+        validate_timestep_alignment(predictions, segments)
+        activations: dict[str, RegionActivation] = {}
         for region in regions:
+            region_name = coerce_region_name(region)
             try:
-                vertex_indices = self.get_roi_indices(region)
+                vertex_indices = self.get_roi_indices(region_name)
             except ValueError:
-                result[region] = {"error": f'Region "{region}" not found in Destrieux atlas.'}
+                activations[region_name] = RegionActivation(
+                    region=region_name,
+                    error=f'Region "{region_name}" not found in Destrieux atlas.',
+                )
                 continue
+            validate_vertex_indices(predictions, vertex_indices, region_name)
 
-            self._validate_vertex_indices(predictions, vertex_indices, region)
-            region_curve = predictions[:, vertex_indices].mean(axis=1)
-            result[region] = {
-                "timestamps": timestamps,
-                "activation": region_curve.astype(float).tolist(),
-                "n_vertices": int(len(vertex_indices)),
-            }
-        return result
+            region_curve = predictions.values[:, vertex_indices].mean(axis=1)
+            activations[region_name] = RegionActivation(
+                region=region_name,
+                timestamps=segments.timestamps,
+                activation=tuple(float(value) for value in region_curve.astype(float).tolist()),
+                n_vertices=int(len(vertex_indices)),
+            )
+        return RegionActivations(items=activations)
 
-    def get_cognitive_load_score(self, preds: np.ndarray, segments: pd.DataFrame | Sequence[Any]) -> dict[str, Any]:
-        return self._get_named_region_score(
-            preds=preds,
-            segments=segments,
-            regions=PFC_REGIONS,
-            score_key="cognitive_load",
-            include_peak_timestamp=True,
+    def get_cognitive_load_score(self, predictions: TribePredictions, segments: TribeSegments) -> CognitiveLoadScore:
+        curve = self._get_named_region_curve(predictions, segments, PFC_REGIONS)
+        scores = normalize_to_percentage(curve)
+        return CognitiveLoadScore(
+            timestamps=segments.timestamps,
+            cognitive_load=tuple(float(value) for value in scores.tolist()),
+            mean_score=float(scores.mean()) if scores.size else 0.0,
+            peak_timestamp_s=float(segments.timestamps[int(scores.argmax())]) if scores.size else 0.0,
         )
 
-    def get_language_processing_score(self, preds: np.ndarray, segments: pd.DataFrame | Sequence[Any]) -> dict[str, Any]:
-        return self._get_named_region_score(
-            preds=preds,
-            segments=segments,
-            regions=LANGUAGE_REGIONS,
-            score_key="language_score",
-            include_peak_timestamp=False,
+    def get_language_processing_score(self, predictions: TribePredictions, segments: TribeSegments) -> LanguageProcessingScore:
+        curve = self._get_named_region_curve(predictions, segments, LANGUAGE_REGIONS)
+        scores = normalize_to_percentage(curve)
+        return LanguageProcessingScore(
+            timestamps=segments.timestamps,
+            language_score=tuple(float(value) for value in scores.tolist()),
+            mean_score=float(scores.mean()) if scores.size else 0.0,
         )
 
     def compare(
         self,
-        preds_a: np.ndarray,
-        preds_b: np.ndarray,
-        segments_a: pd.DataFrame | Sequence[Any],
-        segments_b: pd.DataFrame | Sequence[Any],
-        metric: str = "engagement",
-    ) -> dict[str, Any]:
+        predictions_a: TribePredictions,
+        predictions_b: TribePredictions,
+        segments_a: TribeSegments,
+        segments_b: TribeSegments,
+        metric: ComparisonMetric = ComparisonMetric.ENGAGEMENT,
+    ) -> ComparisonResult:
         fn_map = {
-            "engagement": self.get_temporal_curve,
-            "cognitive_load": self.get_cognitive_load_score,
-            "language": self.get_language_processing_score,
+            ComparisonMetric.ENGAGEMENT: self.get_temporal_curve,
+            ComparisonMetric.COGNITIVE_LOAD: self.get_cognitive_load_score,
+            ComparisonMetric.LANGUAGE: self.get_language_processing_score,
         }
-        score_key_map = {
-            "engagement": "scores",
-            "cognitive_load": "cognitive_load",
-            "language": "language_score",
-        }
-        if metric not in fn_map:
-            raise ValueError(f"Unsupported compare metric '{metric}'. Expected one of {sorted(fn_map)}.")
-
-        result_a = fn_map[metric](preds_a, segments_a)
-        result_b = fn_map[metric](preds_b, segments_b)
-        score_key = score_key_map[metric]
-        mean_a = float(np.mean(result_a[score_key]))
-        mean_b = float(np.mean(result_b[score_key]))
-        winner = "tie" if np.isclose(mean_a, mean_b) else ("a" if mean_a > mean_b else "b")
-        return {
-            "metric": metric,
-            "input_a": {"mean": mean_a, "data": result_a},
-            "input_b": {"mean": mean_b, "data": result_b},
-            "winner": winner,
-            "delta": float(abs(mean_a - mean_b)),
+        score_getter = {
+            ComparisonMetric.ENGAGEMENT: lambda result: result.scores,
+            ComparisonMetric.COGNITIVE_LOAD: lambda result: result.cognitive_load,
+            ComparisonMetric.LANGUAGE: lambda result: result.language_score,
         }
 
-    def diff(self, preds_a: np.ndarray, preds_b: np.ndarray) -> dict[str, Any]:
-        left = self._ensure_predictions(preds_a)
-        right = self._ensure_predictions(preds_b)
-        if left.shape != right.shape:
+        result_a = fn_map[metric](predictions_a, segments_a)
+        result_b = fn_map[metric](predictions_b, segments_b)
+        mean_a = float(np.mean(score_getter[metric](result_a)))
+        mean_b = float(np.mean(score_getter[metric](result_b)))
+        winner = ComparisonWinner.TIE if np.isclose(mean_a, mean_b) else (ComparisonWinner.A if mean_a > mean_b else ComparisonWinner.B)
+        return ComparisonResult(
+            metric=metric,
+            input_a=ComparisonInput(mean=mean_a, data=result_a),
+            input_b=ComparisonInput(mean=mean_b, data=result_b),
+            winner=winner,
+            delta=float(abs(mean_a - mean_b)),
+        )
+
+    def diff(self, predictions_a: TribePredictions, predictions_b: TribePredictions) -> PredictionDiff:
+        if predictions_a.values.shape != predictions_b.values.shape:
             raise ValueError(
-                f"Shape mismatch: {left.shape} vs {right.shape}. Inputs must have the same number of timesteps and vertices."
+                f"Shape mismatch: {predictions_a.values.shape} vs {predictions_b.values.shape}. Inputs must have the same number of timesteps and vertices."
             )
 
-        delta = left - right
-        return {
-            "delta": delta,
-            "mean_diff_per_timestep": delta.mean(axis=1).astype(float).tolist(),
-            "mean_diff_per_vertex": delta.mean(axis=0).astype(float).tolist(),
-            "abs_mean": float(np.abs(delta).mean()),
-            "max_diff_vertex": int(np.abs(delta).mean(axis=0).argmax()),
-        }
+        delta = predictions_a.values - predictions_b.values
+        return PredictionDiff(
+            delta=delta,
+            mean_diff_per_timestep=tuple(float(value) for value in delta.mean(axis=1).astype(float).tolist()),
+            mean_diff_per_vertex=tuple(float(value) for value in delta.mean(axis=0).astype(float).tolist()),
+            abs_mean=float(np.abs(delta).mean()),
+            max_diff_vertex=int(np.abs(delta).mean(axis=0).argmax()),
+        )
 
-    def normalize(self, preds: np.ndarray, baseline_preds: np.ndarray) -> np.ndarray:
-        predictions = self._ensure_predictions(preds)
-        baseline = self._ensure_predictions(baseline_preds)
-        if predictions.shape[1] != baseline.shape[1]:
+    def normalize(self, predictions: TribePredictions, baseline_predictions: TribePredictions) -> NormalizedPredictions:
+        if predictions.n_vertices != baseline_predictions.n_vertices:
             raise ValueError(
-                f"Vertex mismatch: {predictions.shape[1]} vs {baseline.shape[1]}. Baseline must have the same number of vertices."
+                f"Vertex mismatch: {predictions.n_vertices} vs {baseline_predictions.n_vertices}. Baseline must have the same number of vertices."
             )
+        baseline_mean = baseline_predictions.values.mean(axis=0)
+        return NormalizedPredictions(predictions.values - baseline_mean)
 
-        baseline_mean = baseline.mean(axis=0)
-        return predictions - baseline_mean
-
-    def segment_by_engagement(
-        self,
-        preds: np.ndarray,
-        segments: pd.DataFrame | Sequence[Any],
-        threshold: float = 50.0,
-    ) -> dict[str, Any]:
-        curve = self.get_temporal_curve(preds, segments)
-        segment_frame = self._segments_to_frame(segments)
-        scores = np.asarray(curve["scores"], dtype=float)
-        timestamps = np.asarray(curve["timestamps"], dtype=float)
-        end_timestamps = (segment_frame["onset"] + segment_frame["duration"]).to_numpy(dtype=float)
+    def segment_by_engagement(self, predictions: TribePredictions, segments: TribeSegments, threshold: float = 50.0) -> EngagementSegmentation:
+        curve = self.get_temporal_curve(predictions, segments)
+        scores = np.asarray(curve.scores, dtype=float)
+        timestamps = np.asarray(curve.timestamps, dtype=float)
+        end_timestamps = (segments.frame["onset"] + segments.frame["duration"]).to_numpy(dtype=float)
         high_mask = scores >= threshold
         low_mask = ~high_mask
+        return EngagementSegmentation(
+            threshold=float(threshold),
+            high_engagement=self._build_windows(high_mask, timestamps, end_timestamps),
+            low_engagement=self._build_windows(low_mask, timestamps, end_timestamps),
+            pct_high=float(high_mask.mean() * 100),
+        )
 
-        def get_spans(mask: np.ndarray) -> list[dict[str, float]]:
-            spans: list[dict[str, float]] = []
-            in_span = False
-            start = 0.0
-            for index, is_active in enumerate(mask):
-                if is_active and not in_span:
-                    start = float(timestamps[index])
-                    in_span = True
-                    continue
-                if not is_active and in_span:
-                    spans.append({"start_s": start, "end_s": float(end_timestamps[index - 1])})
-                    in_span = False
-            if in_span:
-                spans.append({"start_s": start, "end_s": float(end_timestamps[-1])})
-            return spans
-
-        return {
-            "threshold": float(threshold),
-            "high_engagement": get_spans(high_mask),
-            "low_engagement": get_spans(low_mask),
-            "pct_high": float(high_mask.mean() * 100),
-        }
-
-    def export(self, result: Mapping[str, Any], format: str = "json", path: str | Path = "output") -> str:
-        output_path = Path(path).expanduser()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        normalized_format = format.lower()
-
-        if normalized_format == "json":
-            target = output_path.with_suffix(".json")
-            target.write_text(json.dumps(self._make_json_safe(result), indent=2), encoding="utf-8")
-            return str(target)
-
-        if normalized_format == "csv":
-            frame = self._result_to_csv_frame(result)
-            target = output_path.with_suffix(".csv")
-            frame.to_csv(target, index=False, quoting=csv.QUOTE_MINIMAL)
-            return str(target)
-
-        if normalized_format == "nifti":
-            if "array" not in result and "delta" not in result:
-                raise ValueError("NIfTI export requires a result payload with an 'array' or 'delta' key.")
-            raise NotImplementedError(
-                "NIfTI export is not wired in this wrapper yet. Use tribev2 surface-to-volume projection utilities for MNI export."
-            )
-
-        raise ValueError(f"Unsupported export format '{format}'. Expected one of ['csv', 'json', 'nifti'].")
+    def export(self, result: ExportPayload | TemporalCurve | PeakMoments | RegionActivations | CognitiveLoadScore | LanguageProcessingScore | ComparisonResult | PredictionDiff | NormalizedPredictions | EngagementSegmentation, format: ExportFormat = ExportFormat.JSON, path: str | Path = "output") -> ExportArtifact:
+        if format is ExportFormat.NIFTI:
+            payload = result if isinstance(result, ExportPayload) else None
+            if payload is None or (payload.array is None and payload.delta is None):
+                raise ValueError("NIfTI export requires an ExportPayload with an 'array' or 'delta' value.")
+        return self.file_exporter.export(result=result, format=format, path=path)
 
     def get_roi_indices(self, region: str) -> np.ndarray:
         if self._roi_index_resolver is not None:
@@ -248,33 +217,17 @@ class TribeRunnerUtils:
         except KeyError as exc:
             raise ValueError(f'Region "{region}" not found in Destrieux atlas.') from exc
 
-    def _get_named_region_score(
+    def _get_named_region_curve(
         self,
-        preds: np.ndarray,
-        segments: pd.DataFrame | Sequence[Any],
-        regions: Sequence[str],
-        score_key: str,
-        *,
-        include_peak_timestamp: bool,
-    ) -> dict[str, Any]:
-        predictions = self._ensure_predictions(preds)
-        segment_frame = self._segments_to_frame(segments)
-        self._validate_timestep_alignment(predictions, segment_frame)
-
-        vertex_groups = [self.get_roi_indices(region) for region in regions]
+        predictions: TribePredictions,
+        segments: TribeSegments,
+        regions: Sequence[DestrieuxRegion],
+    ) -> np.ndarray:
+        validate_timestep_alignment(predictions, segments)
+        vertex_groups = [self.get_roi_indices(region.value) for region in regions]
         all_vertices = np.unique(np.concatenate([np.asarray(group, dtype=int) for group in vertex_groups]))
-        self._validate_vertex_indices(predictions, all_vertices, ",".join(regions))
-        curve = predictions[:, all_vertices].mean(axis=1)
-        score = self._normalize_to_percentage(curve)
-        timestamps = segment_frame["onset"].to_numpy(dtype=float)
-        result = {
-            "timestamps": timestamps.tolist(),
-            score_key: score.tolist(),
-            "mean_score": float(score.mean()) if score.size else 0.0,
-        }
-        if include_peak_timestamp:
-            result["peak_timestamp_s"] = float(timestamps[int(score.argmax())]) if score.size else 0.0
-        return result
+        validate_vertex_indices(predictions, all_vertices, ",".join(region.value for region in regions))
+        return predictions.values[:, all_vertices].mean(axis=1)
 
     def _get_roi_lookup(self) -> dict[str, np.ndarray]:
         if self._roi_lookup is not None:
@@ -308,105 +261,18 @@ class TribeRunnerUtils:
         return lookup
 
     @staticmethod
-    def _ensure_predictions(preds: np.ndarray) -> np.ndarray:
-        predictions = np.asarray(preds, dtype=float)
-        if predictions.ndim != 2:
-            raise ValueError(f"Expected preds to have shape (n_timesteps, n_vertices), got {predictions.shape}.")
-        return predictions
-
-    @staticmethod
-    def _normalize_to_percentage(values: np.ndarray) -> np.ndarray:
-        numeric_values = np.asarray(values, dtype=float)
-        if numeric_values.size == 0:
-            return numeric_values
-        spread = float(numeric_values.max() - numeric_values.min())
-        if np.isclose(spread, 0.0):
-            return np.zeros_like(numeric_values, dtype=float)
-        return (numeric_values - numeric_values.min()) / spread * 100.0
-
-    @staticmethod
-    def _validate_timestep_alignment(preds: np.ndarray, segments: pd.DataFrame) -> None:
-        if preds.shape[0] != len(segments):
-            raise ValueError(
-                f"Timestep mismatch: preds has {preds.shape[0]} rows but segments has {len(segments)} rows."
-            )
-
-    @staticmethod
-    def _validate_vertex_indices(preds: np.ndarray, vertex_indices: np.ndarray, region: str) -> None:
-        if vertex_indices.size == 0:
-            raise ValueError(f'Region "{region}" resolved to an empty vertex list.')
-        if int(vertex_indices.max()) >= preds.shape[1]:
-            raise ValueError(
-                f'Region "{region}" references vertex index {int(vertex_indices.max())}, but preds only has {preds.shape[1]} vertices.'
-            )
-
-    @staticmethod
-    def _segments_to_frame(segments: pd.DataFrame | Sequence[Any]) -> pd.DataFrame:
-        if isinstance(segments, pd.DataFrame):
-            frame = segments.copy()
-        else:
-            records: list[dict[str, Any]] = []
-            for segment in segments:
-                if isinstance(segment, Mapping):
-                    records.append(dict(segment))
-                    continue
-                records.append(
-                    {
-                        field: getattr(segment, field)
-                        for field in ("onset", "offset", "start", "duration", "stop")
-                        if getattr(segment, field, None) is not None
-                    }
-                )
-            frame = pd.DataFrame(records)
-
-        if frame.empty:
-            return pd.DataFrame({"onset": pd.Series(dtype=float), "duration": pd.Series(dtype=float)})
-
-        if "onset" not in frame.columns:
-            if "offset" in frame.columns:
-                frame["onset"] = frame["offset"]
-            elif "start" in frame.columns:
-                frame["onset"] = frame["start"]
-            else:
-                raise ValueError("Segments must include an 'onset', 'offset', or 'start' field.")
-
-        if "duration" not in frame.columns:
-            if "stop" in frame.columns:
-                frame["duration"] = frame["stop"] - frame["onset"]
-            else:
-                raise ValueError("Segments must include a 'duration' field or a 'stop' field.")
-
-        return frame[["onset", "duration"]].astype(float).reset_index(drop=True)
-
-    @classmethod
-    def _result_to_csv_frame(cls, result: Mapping[str, Any]) -> pd.DataFrame:
-        list_fields = {key: value for key, value in result.items() if isinstance(value, list)}
-        if not list_fields:
-            raise ValueError("CSV export requires at least one top-level list field in the result payload.")
-
-        if len(list_fields) == 1:
-            only_key, only_value = next(iter(list_fields.items()))
-            if only_value and all(isinstance(item, Mapping) for item in only_value):
-                return pd.DataFrame(only_value)
-            return pd.DataFrame({only_key: only_value})
-
-        lengths = {len(value) for value in list_fields.values()}
-        if len(lengths) != 1:
-            raise ValueError("CSV export requires top-level list fields to have the same length.")
-        return pd.DataFrame(list_fields)
-
-    @classmethod
-    def _make_json_safe(cls, value: Any) -> Any:
-        if isinstance(value, np.ndarray):
-            return value.tolist()
-        if isinstance(value, np.generic):
-            return value.item()
-        if isinstance(value, Path):
-            return str(value)
-        if isinstance(value, Mapping):
-            return {str(key): cls._make_json_safe(item) for key, item in value.items()}
-        if isinstance(value, list):
-            return [cls._make_json_safe(item) for item in value]
-        if isinstance(value, tuple):
-            return [cls._make_json_safe(item) for item in value]
-        return value
+    def _build_windows(mask: np.ndarray, timestamps: np.ndarray, end_timestamps: np.ndarray) -> tuple[EngagementWindow, ...]:
+        windows: list[EngagementWindow] = []
+        in_window = False
+        start = 0.0
+        for index, is_active in enumerate(mask):
+            if is_active and not in_window:
+                start = float(timestamps[index])
+                in_window = True
+                continue
+            if not is_active and in_window:
+                windows.append(EngagementWindow(start_s=start, end_s=float(end_timestamps[index - 1])))
+                in_window = False
+        if in_window:
+            windows.append(EngagementWindow(start_s=start, end_s=float(end_timestamps[-1])))
+        return tuple(windows)

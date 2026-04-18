@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from libs.dataclasses import TribeConfig
 from services.inference import TribeRunner
 from tribe_setup.models import PredictionResult
 
@@ -35,11 +36,15 @@ class FakeTribeBackend:
         return brain_stimulus, segments
 
 
+def build_runner_config(tmp_path: Path) -> TribeConfig:
+    return TribeConfig(cache_dir=tmp_path / "cache", output_dir=tmp_path / "outputs")
+
+
 def test_runner_run_returns_prediction_result(tmp_path: Path) -> None:
     audio_path = tmp_path / "sample.wav"
     audio_path.write_bytes(b"audio")
     backend = FakeTribeBackend()
-    runner = TribeRunner(cache_dir=tmp_path / "cache", output_dir=tmp_path / "outputs", backend=backend)
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
 
     result = runner.run(audio_path, verbose=False)
 
@@ -54,7 +59,7 @@ def test_runner_get_event_dataframe_uses_backend(tmp_path: Path) -> None:
     video_path = tmp_path / "sample.mp4"
     video_path.write_bytes(b"video")
     backend = FakeTribeBackend()
-    runner = TribeRunner(cache_dir=tmp_path / "cache", output_dir=tmp_path / "outputs", backend=backend)
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
 
     events = runner.get_event_dataframe(video_path)
 
@@ -66,7 +71,7 @@ def test_runner_get_brain_stimulus_dataframe_from_result(tmp_path: Path) -> None
     audio_path = tmp_path / "sample.wav"
     audio_path.write_bytes(b"audio")
     backend = FakeTribeBackend()
-    runner = TribeRunner(cache_dir=tmp_path / "cache", output_dir=tmp_path / "outputs", backend=backend)
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
     result = runner.run(audio_path, verbose=False)
 
     frame = runner.get_brain_stimulus_dataframe(result)
@@ -79,7 +84,7 @@ def test_runner_save_output_writes_bundle(tmp_path: Path) -> None:
     audio_path = tmp_path / "sample.wav"
     audio_path.write_bytes(b"audio")
     backend = FakeTribeBackend()
-    runner = TribeRunner(cache_dir=tmp_path / "cache", output_dir=tmp_path / "outputs", backend=backend)
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
     result = runner.run(audio_path, verbose=False)
 
     output_path = runner.save_output(result, include_brain_stimulus_csv=True)
@@ -99,7 +104,7 @@ def test_runner_save_output_writes_bundle(tmp_path: Path) -> None:
 
 def test_runner_fails_fast_on_invalid_input(tmp_path: Path) -> None:
     backend = FakeTribeBackend()
-    runner = TribeRunner(cache_dir=tmp_path / "cache", output_dir=tmp_path / "outputs", backend=backend)
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
 
     try:
         runner.run(tmp_path / "missing.wav", verbose=False)
@@ -109,3 +114,13 @@ def test_runner_fails_fast_on_invalid_input(tmp_path: Path) -> None:
         raise AssertionError("Expected FileNotFoundError")
 
     assert backend.events_calls == []
+
+
+def test_runner_uses_yaml_defaults_when_config_is_not_provided(tmp_path: Path, monkeypatch) -> None:
+    backend = FakeTribeBackend()
+    monkeypatch.chdir(tmp_path)
+
+    runner = TribeRunner(backend=backend)
+
+    assert runner.cache_dir == (tmp_path / "cache").resolve()
+    assert runner.output_dir == (tmp_path / "outputs").resolve()

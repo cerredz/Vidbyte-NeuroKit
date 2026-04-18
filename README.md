@@ -29,11 +29,14 @@ Notes:
 
 ```python
 from tribe_setup import TribeRunner
+from tribe_setup.models import TribeConfig
 
 runner = TribeRunner(
-    model_name="facebook/tribev2",
-    cache_dir="cache",
-    output_dir="outputs",
+    config=TribeConfig(
+        model_name="facebook/tribev2",
+        cache_dir="cache",
+        output_dir="outputs",
+    ),
 )
 
 result = runner.run("path/to/stimulus.mp4")

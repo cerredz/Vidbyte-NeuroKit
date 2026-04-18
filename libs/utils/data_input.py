@@ -3,26 +3,18 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
 import pandas as pd
 
-from tribe_setup.models import InputKind, PreparedInput
-
-AUDIO_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg"}
-VIDEO_SUFFIXES = {".mp4", ".avi", ".mkv", ".mov", ".webm"}
-IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-SUPPORTED_SUFFIXES = AUDIO_SUFFIXES | VIDEO_SUFFIXES | IMAGE_SUFFIXES
-
-
-class SupportsEventsDataFrame(Protocol):
-    def get_events_dataframe(
-        self,
-        text_path: str | None = None,
-        audio_path: str | None = None,
-        video_path: str | None = None,
-    ) -> pd.DataFrame:
-        ...
+from libs.dataclasses import PreparedInput
+from libs.enums import (
+    AUDIO_SUFFIX_VALUES,
+    IMAGE_SUFFIX_VALUES,
+    SUPPORTED_SUFFIX_VALUES,
+    VIDEO_SUFFIX_VALUES,
+    InputKind,
+)
+from libs.protocols import SupportsEventsDataFrame
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,15 +39,15 @@ class DataInput:
     @staticmethod
     def _detect_kind(path: Path) -> InputKind:
         suffix = path.suffix.lower()
-        if suffix in AUDIO_SUFFIXES:
+        if suffix in AUDIO_SUFFIX_VALUES:
             return InputKind.AUDIO
-        if suffix in VIDEO_SUFFIXES:
+        if suffix in VIDEO_SUFFIX_VALUES:
             return InputKind.VIDEO
-        if suffix in IMAGE_SUFFIXES:
+        if suffix in IMAGE_SUFFIX_VALUES:
             return InputKind.IMAGE
         raise ValueError(
             "Unsupported input type. "
-            f"Expected one of {sorted(SUPPORTED_SUFFIXES)}, got '{suffix or '<none>'}'."
+            f"Expected one of {sorted(SUPPORTED_SUFFIX_VALUES)}, got '{suffix or '<none>'}'."
         )
 
     def prepare(

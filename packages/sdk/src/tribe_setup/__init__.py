@@ -1,10 +1,11 @@
-from tribe_setup.models import InputKind, PredictionResult, PreparedInput
+from tribe_setup.models import InputKind, PredictionResult, PreparedInput, TribeConfig
 
 __all__ = [
     "DataInput",
     "InputKind",
     "PredictionResult",
     "PreparedInput",
+    "TribeConfig",
     "TribeRunner",
 ]
 

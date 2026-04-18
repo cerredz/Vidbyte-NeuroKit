@@ -12,6 +12,7 @@ dependencies = [
   "moviepy>=2.2.1",
   "numpy>=2.2,<3",
   "pandas>=2.2,<3",
+  "PyYAML>=6.0,<7",
   "tribev2 @ git+https://github.com/facebookresearch/tribev2.git",
 ]
 

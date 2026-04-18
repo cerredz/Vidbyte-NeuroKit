@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from libs.enums import InputKind
 from libs.utils.data_input import DataInput
-from tribe_setup.models import InputKind
 
 
 class FakeEventsModel:

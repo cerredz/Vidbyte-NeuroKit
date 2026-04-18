@@ -1,0 +1,7 @@
+model_name: facebook/tribev2
+cache_dir: cache
+output_dir: outputs
+checkpoint_name: best.ckpt
+device: auto
+cluster: null
+config_update: {}

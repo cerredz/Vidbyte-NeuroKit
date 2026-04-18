@@ -16,14 +16,17 @@ dependencies = [
   "tribev2 @ git+https://github.com/facebookresearch/tribev2.git",
 ]
 
+[project.scripts]
+tribe-cli = "tribe_cli.main:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3",
 ]
 
 [tool.pytest.ini_options]
-pythonpath = [".", "packages/sdk/src"]
+pythonpath = [".", "packages/sdk/src", "packages/cli/src"]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-where = [".", "packages/sdk/src"]
+where = [".", "packages/sdk/src", "packages/cli/src"]

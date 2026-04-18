@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tribe-cli = "tribe_cli.main:main"
+vidbyte-neuro-kit = "tribe_cli.main:main"
 
 [project.optional-dependencies]
 dev = [

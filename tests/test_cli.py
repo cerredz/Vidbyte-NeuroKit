@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tribe_cli.main import execute_request, load_payload
+from tribe_cli.utils import CliPayloadKey, execute_request, load_payload, resolve_command
 
 
 class FakeCliRunner:
@@ -52,23 +52,23 @@ def fake_runner_factory(config=None):
 
 def test_execute_request_run_returns_json_safe_payload() -> None:
     response = execute_request(
-        "run",
+        "predict-response",
         {"input_path": "sample.wav", "config": {"device": "cpu"}},
         runner_factory=fake_runner_factory,
     )
 
-    assert response["input_path"] == "sample.wav"
-    assert response["brain_stimulus_shape"] == [1, 2]
+    assert response[CliPayloadKey.INPUT_PATH.value] == "sample.wav"
+    assert response[CliPayloadKey.BRAIN_STIMULUS_SHAPE.value] == [1, 2]
 
 
 def test_execute_request_save_output_returns_path() -> None:
     response = execute_request(
-        "save-output",
+        "save-bundle",
         {"input_path": "sample.wav", "save_to": "bundle"},
         runner_factory=fake_runner_factory,
     )
 
-    assert response == {"saved_to": str(Path("bundle"))}
+    assert response == {CliPayloadKey.SAVED_TO.value: str(Path("bundle"))}
 
 
 def test_load_payload_requires_json_object() -> None:
@@ -82,8 +82,14 @@ def test_load_payload_requires_json_object() -> None:
 
 def test_execute_request_rejects_non_object_config() -> None:
     try:
-        execute_request("run", {"config": "bad"}, runner_factory=fake_runner_factory)
+        execute_request("predict-response", {"config": "bad"}, runner_factory=fake_runner_factory)
     except ValueError as exc:
         assert "config must be a JSON object" in str(exc)
     else:  # pragma: no cover - defensive branch
         raise AssertionError("Expected ValueError")
+
+
+def test_resolve_command_maps_user_intent_path() -> None:
+    command = resolve_command("inspect", "events")
+
+    assert command == "inspect-events"

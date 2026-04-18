@@ -26,6 +26,11 @@ class ImageSuffix(StrEnum):
     WEBP = ".webp"
 
 
+class TextSuffix(StrEnum):
+    MD = ".md"
+    TXT = ".txt"
+
+
 def _enum_values(enum_type: type[StrEnum]) -> frozenset[str]:
     return frozenset(member.value for member in enum_type)
 
@@ -33,4 +38,5 @@ def _enum_values(enum_type: type[StrEnum]) -> frozenset[str]:
 AUDIO_SUFFIX_VALUES = _enum_values(AudioSuffix)
 VIDEO_SUFFIX_VALUES = _enum_values(VideoSuffix)
 IMAGE_SUFFIX_VALUES = _enum_values(ImageSuffix)
-SUPPORTED_SUFFIX_VALUES = AUDIO_SUFFIX_VALUES | VIDEO_SUFFIX_VALUES | IMAGE_SUFFIX_VALUES
+TEXT_SUFFIX_VALUES = _enum_values(TextSuffix)
+SUPPORTED_SUFFIX_VALUES = AUDIO_SUFFIX_VALUES | VIDEO_SUFFIX_VALUES | IMAGE_SUFFIX_VALUES | TEXT_SUFFIX_VALUES

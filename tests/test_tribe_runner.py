@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 
 from libs.dataclasses import TribeConfig
+from libs.enums import TranslationOutputKey
+from libs.utils import TribeRunnerUtils
 from services.inference import TribeRunner
 from tribe_setup.models import PredictionResult
 
@@ -18,10 +20,15 @@ class FakeTribeBackend:
 
     def get_events_dataframe(self, **kwargs: str) -> pd.DataFrame:
         self.events_calls.append(kwargs)
+        input_type = "Audio"
+        if "video_path" in kwargs:
+            input_type = "Video"
+        if "text_path" in kwargs:
+            input_type = "Text"
         return pd.DataFrame(
             [
                 {
-                    "type": "Audio" if "audio_path" in kwargs else "Video",
+                    "type": input_type,
                     "filepath": next(iter(kwargs.values())),
                     "start": 0.0,
                     "duration": 1.0,
@@ -138,3 +145,95 @@ def test_runner_uses_root_env_for_no_arg_run(tmp_path: Path, monkeypatch) -> Non
 
     assert result.input_path == audio_path.resolve()
     assert len(backend.predict_calls) == 1
+
+
+def test_runner_run_batch_preserves_input_order_and_supports_mixed_types(tmp_path: Path) -> None:
+    audio_path = tmp_path / "sample.wav"
+    video_path = tmp_path / "sample.mp4"
+    text_path = tmp_path / "sample.txt"
+    audio_path.write_bytes(b"audio")
+    video_path.write_bytes(b"video")
+    text_path.write_text("hello", encoding="utf-8")
+    backend = FakeTribeBackend()
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
+
+    results = runner.run_batch([video_path, audio_path, text_path], verbose=False, max_workers=2)
+
+    assert [result.input_path for result in results] == [
+        video_path.resolve(),
+        audio_path.resolve(),
+        text_path.resolve(),
+    ]
+    assert [result.input_kind.value for result in results] == ["video", "audio", "text"]
+    assert len(backend.predict_calls) == 3
+
+
+def test_runner_translate_returns_requested_outputs(tmp_path: Path) -> None:
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"audio")
+    backend = FakeTribeBackend()
+    utils = TribeRunnerUtils(roi_index_resolver=lambda region: np.array([0]) if region == "G_front_sup" else np.array([1]))
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend, utils=utils)
+    result = runner.run(audio_path, verbose=False)
+
+    translated = runner.translate(
+        result,
+        [TranslationOutputKey.PEAK, "cognitive", "regions"],
+        options={"peak": {"top_n": 1}, "regions": {"regions": ["G_front_sup"]}},
+    )
+
+    assert set(translated) == {"peak", "cognitive", "regions"}
+    assert translated["peak"][0]["timestamp_s"] == 1.0
+    assert translated["cognitive"]["mean_score"] == 50.0
+    assert translated["regions"]["G_front_sup"]["n_vertices"] == 1
+
+
+def test_runner_translate_fails_fast_on_invalid_key(tmp_path: Path) -> None:
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"audio")
+    backend = FakeTribeBackend()
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
+    result = runner.run(audio_path, verbose=False)
+
+    try:
+        runner.translate(result, ["peak", "invalid-key"])
+    except ValueError as exc:
+        assert "Unsupported translation key" in str(exc)
+    else:  # pragma: no cover - defensive branch
+        raise AssertionError("Expected ValueError")
+
+
+def test_runner_compare_diff_normalize_and_segment(tmp_path: Path) -> None:
+    backend = FakeTribeBackend()
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
+    preds_a = np.array([[1.0, 3.0], [2.0, 4.0]])
+    preds_b = np.array([[0.5, 2.0], [1.0, 3.0]])
+    segments = pd.DataFrame([{"onset": 0.0, "duration": 1.0}, {"onset": 1.0, "duration": 1.0}])
+
+    comparison = runner.compare(preds_a, preds_b, segments_a=segments, segments_b=segments, metric="engagement")
+    difference = runner.diff(preds_a, preds_b)
+    normalized = runner.normalize(preds_a, preds_b)
+    segmented = runner.segment_by_engagement(preds_a, segments, threshold=50.0)
+
+    assert comparison["winner"] == "tie"
+    assert difference["max_diff_vertex"] == 1
+    assert normalized.shape == preds_a.shape
+    assert segmented["pct_high"] == 50.0
+
+
+def test_runner_export_writes_json_and_csv(tmp_path: Path) -> None:
+    backend = FakeTribeBackend()
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=backend)
+    curve_result = {
+        "timestamps": [0.0, 1.0],
+        "scores": [0.0, 100.0],
+        "raw": [1.5, 3.5],
+    }
+
+    json_path = runner.export(curve_result, format="json", path=tmp_path / "curve")
+    csv_path = runner.export(curve_result, format="csv", path=tmp_path / "curve_table")
+
+    assert Path(json_path).exists()
+    assert Path(csv_path).exists()
+    assert json.loads(Path(json_path).read_text(encoding="utf-8"))["scores"] == [0.0, 100.0]
+    assert "timestamps,scores,raw" in Path(csv_path).read_text(encoding="utf-8")

@@ -3,19 +3,25 @@ from libs.enums.suffixes import (
     AUDIO_SUFFIX_VALUES,
     IMAGE_SUFFIX_VALUES,
     SUPPORTED_SUFFIX_VALUES,
+    TEXT_SUFFIX_VALUES,
     VIDEO_SUFFIX_VALUES,
     AudioSuffix,
     ImageSuffix,
+    TextSuffix,
     VideoSuffix,
 )
+from libs.enums.translation_output_key import TranslationOutputKey
 
 __all__ = [
     "AUDIO_SUFFIX_VALUES",
     "IMAGE_SUFFIX_VALUES",
     "InputKind",
     "SUPPORTED_SUFFIX_VALUES",
+    "TEXT_SUFFIX_VALUES",
+    "TranslationOutputKey",
     "VIDEO_SUFFIX_VALUES",
     "AudioSuffix",
     "ImageSuffix",
+    "TextSuffix",
     "VideoSuffix",
 ]

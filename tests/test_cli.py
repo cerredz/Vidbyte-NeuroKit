@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
-from tribe_cli.utils import CliPayloadKey, execute_request, load_payload, resolve_command
+from tribe_cli.utils import CliPayloadKey, execute_request, load_payload, resolve_command, run_cli
 
 
 class FakeCliRunner:
@@ -50,6 +51,28 @@ def fake_runner_factory(config=None):
     return FakeCliRunner(config=config)
 
 
+class NoisyCliRunner(FakeCliRunner):
+    def run(self, input_path=None, *, verbose=None, save_to=None):
+        print("stdout-noise")
+        print("stderr-noise", file=sys.stderr)
+        return super().run(input_path=input_path, verbose=verbose, save_to=save_to)
+
+
+def noisy_runner_factory(config=None):
+    return NoisyCliRunner(config=config)
+
+
+class FailingCliRunner(FakeCliRunner):
+    def run(self, input_path=None, *, verbose=None, save_to=None):
+        print("stdout-noise")
+        print("stderr-noise", file=sys.stderr)
+        raise RuntimeError("runner exploded")
+
+
+def failing_runner_factory(config=None):
+    return FailingCliRunner(config=config)
+
+
 def test_execute_request_run_returns_json_safe_payload() -> None:
     response = execute_request(
         "predict-response",
@@ -93,3 +116,34 @@ def test_resolve_command_maps_user_intent_path() -> None:
     command = resolve_command("inspect", "events")
 
     assert command == "inspect-events"
+
+
+def test_run_cli_writes_only_response_json_to_stdout(capsys) -> None:
+    exit_code = run_cli(
+        ["predict", "response", "--json", "{\"input_path\": \"sample.wav\"}"],
+        runner_factory=noisy_runner_factory,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "stdout-noise" not in captured.out
+    assert "stderr-noise" not in captured.out
+    assert "stderr-noise" not in captured.err
+    response = json.loads(captured.out)
+    assert response["ok"] is True
+
+
+def test_run_cli_writes_error_json_to_stderr_only(capsys) -> None:
+    exit_code = run_cli(
+        ["predict", "response", "--json", "{\"input_path\": \"sample.wav\"}"],
+        runner_factory=failing_runner_factory,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.out == ""
+    assert "stdout-noise" not in captured.err
+    assert "stderr-noise" not in captured.err
+    response = json.loads(captured.err)
+    assert response["ok"] is False
+    assert response["error"] == "runner exploded"

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 import json
 import sys
 from enum import StrEnum
@@ -72,16 +74,16 @@ COMMAND_LOOKUP = {
 }
 
 
-def run_cli(argv: list[str] | None = None) -> int:
+def run_cli(argv: list[str] | None = None, runner_factory: Callable[..., Any] = TribeRunner) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     payload = load_payload(args.json_payload)
     command = resolve_command(args.task, args.action)
 
     try:
-        response = execute_request(command, payload)
+        response = execute_request_quietly(command, payload, runner_factory)
     except Exception as exc:
-        print(json.dumps({CliPayloadKey.OK.value: False, CliPayloadKey.COMMAND.value: command, CliPayloadKey.ERROR.value: str(exc)}))
+        print(json.dumps({CliPayloadKey.OK.value: False, CliPayloadKey.COMMAND.value: command, CliPayloadKey.ERROR.value: str(exc)}), file=sys.stderr)
         return 1
 
     print(json.dumps({CliPayloadKey.OK.value: True, CliPayloadKey.COMMAND.value: command, CliPayloadKey.RESULT.value: response}))
@@ -148,6 +150,11 @@ def execute_request(command: str, payload: dict[str, Any], runner_factory: Calla
         )
         return {CliPayloadKey.SAVED_TO.value: str(saved_path)}
     raise ValueError(f"Unsupported command: {command}")
+
+
+def execute_request_quietly(command: str, payload: dict[str, Any], runner_factory: Callable[..., Any] = TribeRunner) -> dict[str, Any]:
+    with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+        return execute_request(command, payload, runner_factory)
 
 
 def build_runner(payload: dict[str, Any], runner_factory: Callable[..., Any]) -> Any:

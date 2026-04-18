@@ -5,9 +5,9 @@
 Examples:
 
 ```bash
-tribe-cli run --json "{\"input_path\": \"sample.wav\"}"
+tribe-cli predict response --json "{\"input_path\": \"sample.wav\"}"
 ```
 
 ```bash
-echo "{\"input_path\": \"sample.wav\"}" | tribe-cli get-event-dataframe
+echo "{\"input_path\": \"sample.wav\"}" | tribe-cli inspect events
 ```

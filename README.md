@@ -72,11 +72,11 @@ saved_to = runner.save_output(result)
 The CLI is JSON-in / JSON-out:
 
 ```bash
-tribe-cli run --json "{\"input_path\": \"path/to/stimulus.mp4\"}"
+tribe-cli predict response --json "{\"input_path\": \"path/to/stimulus.mp4\"}"
 ```
 
 ```bash
-echo "{\"input_path\": \"path/to/stimulus.mp4\"}" | tribe-cli get-event-dataframe
+echo "{\"input_path\": \"path/to/stimulus.mp4\"}" | tribe-cli inspect events
 ```
 
 ## Output bundle

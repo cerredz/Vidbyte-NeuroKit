@@ -25,6 +25,27 @@ Notes:
 - Meta's demo notebook notes that you may need Hugging Face access to the Llama 3.2 dependency used by the text pipeline.
 - Image conversion relies on `moviepy`, which in practice may require ffmpeg to be available in your environment.
 
+## Root `.env` support
+
+You can place runner defaults in a root `.env` file:
+
+```env
+TRIBE_MODEL_NAME=facebook/tribev2
+TRIBE_INPUT_PATH=path/to/stimulus.mp4
+TRIBE_CACHE_DIR=cache
+TRIBE_OUTPUT_DIR=outputs
+TRIBE_VERBOSE=true
+```
+
+Then this works:
+
+```python
+from tribe_setup import TribeRunner
+
+runner = TribeRunner()
+result = runner.run()
+```
+
 ## Example
 
 ```python
@@ -44,6 +65,18 @@ events = runner.get_event_dataframe("path/to/stimulus.mp4")
 brain_stimulus = runner.get_brain_stimulus(result)
 brain_stimulus_frame = runner.get_brain_stimulus_dataframe(result)
 saved_to = runner.save_output(result)
+```
+
+## CLI
+
+The CLI is JSON-in / JSON-out:
+
+```bash
+tribe-cli run --json "{\"input_path\": \"path/to/stimulus.mp4\"}"
+```
+
+```bash
+echo "{\"input_path\": \"path/to/stimulus.mp4\"}" | tribe-cli get-event-dataframe
 ```
 
 ## Output bundle

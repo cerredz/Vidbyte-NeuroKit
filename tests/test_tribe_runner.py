@@ -124,3 +124,17 @@ def test_runner_uses_yaml_defaults_when_config_is_not_provided(tmp_path: Path, m
 
     assert runner.cache_dir == (tmp_path / "cache").resolve()
     assert runner.output_dir == (tmp_path / "outputs").resolve()
+
+
+def test_runner_uses_root_env_for_no_arg_run(tmp_path: Path, monkeypatch) -> None:
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"audio")
+    (tmp_path / ".env").write_text(f"TRIBE_INPUT_PATH={audio_path}\n", encoding="utf-8")
+    backend = FakeTribeBackend()
+    monkeypatch.chdir(tmp_path)
+
+    runner = TribeRunner(backend=backend)
+    result = runner.run()
+
+    assert result.input_path == audio_path.resolve()
+    assert len(backend.predict_calls) == 1

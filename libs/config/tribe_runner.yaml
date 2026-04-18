@@ -5,3 +5,7 @@ checkpoint_name: best.ckpt
 device: auto
 cluster: null
 config_update: {}
+input_path: null
+save_to: null
+verbose: true
+include_brain_stimulus_csv: false

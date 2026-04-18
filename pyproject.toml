@@ -10,11 +10,16 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "moviepy>=2.2.1",
+  "nilearn>=0.11,<1",
   "numpy>=2.2,<3",
   "pandas>=2.2,<3",
   "PyYAML>=6.0,<7",
   "tribev2 @ git+https://github.com/facebookresearch/tribev2.git",
 ]
+
+[project.scripts]
+tribe-cli = "tribe_cli.main:main"
+neurokit = "tribe_cli.main:main"
 
 [project.optional-dependencies]
 dev = [
@@ -22,8 +27,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = [".", "packages/sdk/src"]
+pythonpath = [".", "packages/sdk/src", "packages/cli/src"]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-where = [".", "packages/sdk/src"]
+where = [".", "packages/sdk/src", "packages/cli/src"]

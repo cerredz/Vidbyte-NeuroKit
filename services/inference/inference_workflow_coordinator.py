@@ -47,6 +47,28 @@ class InferenceWorkflowCoordinator:
             return result_or_input
         return run_prediction(result_or_input, verbose=verbose)
 
+    def resolve_input_path(self, input_path: str | Path | None) -> str | Path:
+        if input_path is not None:
+            return input_path
+        if self.config.input_path is not None:
+            return self.config.input_path
+        raise ValueError("No input_path was provided. Supply one directly or set TRIBE_INPUT_PATH in the root .env file.")
+
+    def resolve_verbose(self, verbose: bool | None) -> bool:
+        if verbose is not None:
+            return verbose
+        return bool(self.config.verbose)
+
+    def resolve_save_to(self, save_to: str | Path | None) -> str | Path | None:
+        if save_to is not None:
+            return save_to
+        return self.config.save_to
+
+    def resolve_include_brain_stimulus_csv(self, include_brain_stimulus_csv: bool | None) -> bool:
+        if include_brain_stimulus_csv is not None:
+            return include_brain_stimulus_csv
+        return bool(self.config.include_brain_stimulus_csv)
+
     def build_output_metadata(self, result: PredictionResult) -> dict[str, Any]:
         return {
             "input_path": str(result.input_path),

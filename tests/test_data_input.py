@@ -45,6 +45,15 @@ def test_data_input_detects_image_file(tmp_path: Path) -> None:
     assert data_input.kind is InputKind.IMAGE
 
 
+def test_data_input_detects_text_file(tmp_path: Path) -> None:
+    text_path = tmp_path / "sample.txt"
+    text_path.write_text("hello", encoding="utf-8")
+
+    data_input = DataInput.from_path(text_path)
+
+    assert data_input.kind is InputKind.TEXT
+
+
 def test_data_input_rejects_missing_file(tmp_path: Path) -> None:
     missing_path = tmp_path / "missing.mp4"
 
@@ -107,3 +116,18 @@ def test_build_events_dataframe_dispatches_image_as_video(
     assert prepared_input.kind is InputKind.IMAGE
     assert prepared_input.model_path == prepared_video_path
     assert model.calls == [{"video_path": str(prepared_video_path)}]
+
+
+def test_build_events_dataframe_dispatches_text_path(tmp_path: Path) -> None:
+    text_path = tmp_path / "sample.txt"
+    text_path.write_text("hello", encoding="utf-8")
+    model = FakeEventsModel()
+
+    prepared_input, events = DataInput.from_path(text_path).build_events_dataframe(
+        model=model,
+        working_dir=tmp_path,
+    )
+
+    assert prepared_input.model_kwargs == {"text_path": str(text_path.resolve())}
+    assert model.calls == [{"text_path": str(text_path.resolve())}]
+    assert list(events.columns) == ["text_path"]

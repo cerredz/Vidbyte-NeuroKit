@@ -15,8 +15,13 @@ class ConfigLoader:
 
     def load(self) -> TribeConfig:
         defaults = self._read_defaults()
-        overrides = self.config.to_dict()
-        merged = {**defaults, **{key: value for key, value in overrides.items() if value is not None}}
+        env_overrides = TribeConfig.from_env_file().to_dict()
+        config_overrides = self.config.to_dict()
+        merged = {
+            **defaults,
+            **{key: value for key, value in env_overrides.items() if value is not None},
+            **{key: value for key, value in config_overrides.items() if value is not None},
+        }
         return self._validate(merged)
 
     def _resolve_config_path(self, config_path: str | Path | None) -> Path:
@@ -40,6 +45,10 @@ class ConfigLoader:
             "device",
             "cluster",
             "config_update",
+            "input_path",
+            "save_to",
+            "verbose",
+            "include_brain_stimulus_csv",
         }
         missing_keys = sorted(required_keys - payload.keys())
         if missing_keys:
@@ -48,6 +57,10 @@ class ConfigLoader:
         config_update = payload["config_update"]
         if config_update is not None and not isinstance(config_update, dict):
             raise ValueError("config_update must be a mapping or null.")
+        for flag_name in ("verbose", "include_brain_stimulus_csv"):
+            flag_value = payload[flag_name]
+            if flag_value is not None and not isinstance(flag_value, bool):
+                raise ValueError(f"{flag_name} must be a boolean or null.")
 
         return TribeConfig(
             model_name=str(payload["model_name"]),
@@ -57,4 +70,8 @@ class ConfigLoader:
             device=str(payload["device"]),
             cluster=payload["cluster"],
             config_update=config_update,
+            input_path=payload["input_path"],
+            save_to=payload["save_to"],
+            verbose=payload["verbose"],
+            include_brain_stimulus_csv=payload["include_brain_stimulus_csv"],
         )

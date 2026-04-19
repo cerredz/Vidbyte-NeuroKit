@@ -15,24 +15,26 @@ from libs.providers.vimeo import VimeoCredentials, VimeoProvider
 from libs.utils.tribe_utils import to_json_safe_value
 from services.inference import TribeRunner
 from services.providers import DropboxRunner, GoogleDriveRunner, MetaMarketingRunner, VimeoRunner
+from tribe_cli.utils import run_cli
 
 
-COMMANDS = {
+LEGACY_COMMANDS = {
     "run",
     "get-event-dataframe",
     "get-brain-stimulus",
     "get-brain-stimulus-dataframe",
     "save-output",
 }
-
-PROVIDERS = {"dropbox", "google-drive", "meta-ads", "vimeo"}
+PROVIDER_COMMANDS = {"connect", "analyze", "compare"}
 
 
 def main(argv: list[str] | None = None) -> int:
     raw_args = list(argv if argv is not None else sys.argv[1:])
-    if raw_args and raw_args[0] in COMMANDS:
+    if raw_args and raw_args[0] in LEGACY_COMMANDS:
         return _run_legacy_cli(raw_args)
-    return _run_provider_cli(raw_args)
+    if raw_args and raw_args[0] in PROVIDER_COMMANDS:
+        return _run_provider_cli(raw_args)
+    return run_cli(raw_args)
 
 
 def _run_legacy_cli(argv: list[str]) -> int:
@@ -65,8 +67,8 @@ def _run_provider_cli(argv: list[str]) -> int:
 
 
 def build_legacy_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="neurokit")
-    parser.add_argument("command", choices=sorted(COMMANDS))
+    parser = argparse.ArgumentParser(prog="tribe-cli")
+    parser.add_argument("command", choices=sorted(LEGACY_COMMANDS))
     parser.add_argument("--json", dest="json_payload", help="Inline JSON payload. If omitted, stdin is used when piped.")
     return parser
 
@@ -156,7 +158,7 @@ def load_payload(raw_payload: str | None) -> dict[str, Any]:
 
 
 def execute_request(command: str, payload: dict[str, Any], runner_factory: Callable[..., Any] = TribeRunner) -> dict[str, Any]:
-    if command not in COMMANDS:
+    if command not in LEGACY_COMMANDS:
         raise ValueError(f"Unsupported command: {command}")
 
     runner = build_runner(payload, runner_factory)

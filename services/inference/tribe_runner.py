@@ -7,7 +7,7 @@ from typing import Any, Mapping, Sequence
 import pandas as pd
 
 from libs.config import ConfigLoader
-from libs.dataclasses import PredictionResult, TribeConfig, TribePredictions, TribeSegments
+from libs.dataclasses import PredictionResult, TranslationReport, TribeConfig, TribePredictions, TribeSegments
 from libs.enums import ComparisonMetric, ExportFormat, TranslationOutputKey
 from libs.protocols import SupportsTribeModel
 from libs.utils import DataInput, LocalFileManager, TribeRunnerUtils
@@ -64,7 +64,15 @@ class TribeRunner:
             self.save_output(result=result, output_path=resolved_save_to)
         return result
 
-    def run_batch(self, inputs: Sequence[str | Path], *, verbose: bool | None = None, save_to: str | Path | None = None, max_workers: int | None = None) -> list[PredictionResult]:
+    def run_batch(
+        self,
+        inputs: Sequence[str | Path],
+        *,
+        verbose: bool | None = None,
+        save_to: str | Path | None = None,
+        max_workers: int | None = None,
+        parallel: bool = False,
+    ) -> list[PredictionResult]:
         if isinstance(inputs, (str, Path)):
             raise TypeError("run_batch expects a sequence of input paths, not a single path.")
 
@@ -74,12 +82,17 @@ class TribeRunner:
 
         resolved_verbose = self.workflow.resolve_verbose(verbose)
         resolved_save_to = self.workflow.resolve_save_to(save_to)
-        worker_count = max_workers or min(len(input_list), 32)
-        if worker_count <= 0:
-            raise ValueError("max_workers must be greater than zero.")
+        use_parallel = parallel or max_workers is not None
 
-        with ThreadPoolExecutor(max_workers=worker_count) as executor:
-            results = list(executor.map(lambda input_path: self.run(input_path, verbose=resolved_verbose, save_to=None), input_list))
+        if use_parallel:
+            worker_count = max_workers or min(len(input_list), 32)
+            if worker_count <= 0:
+                raise ValueError("max_workers must be greater than zero.")
+
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                results = list(executor.map(lambda input_path: self.run(input_path, verbose=resolved_verbose, save_to=None), input_list))
+        else:
+            results = [self.run(input_path, verbose=resolved_verbose, save_to=None) for input_path in input_list]
 
         if resolved_save_to is not None:
             base_output_dir = self.file_manager.ensure_directory(resolved_save_to)
@@ -175,3 +188,29 @@ class TribeRunner:
                     raise ValueError(f"Unsupported translation output '{output_key.value}'.")
 
         return translated
+
+    def report(
+        self,
+        result_or_predictions: PredictionResult | TribePredictions,
+        *,
+        segments: TribeSegments | Sequence[Any] | None = None,
+        options: Mapping[TranslationOutputKey | str, Mapping[str, Any]] | None = None,
+    ) -> TranslationReport:
+        translated = self.translate(
+            result_or_predictions,
+            list(TranslationOutputKey),
+            segments=segments,
+            options=options,
+        )
+        return TranslationReport(
+            temporal=translated[TranslationOutputKey.TEMPORAL.value],
+            peak=translated[TranslationOutputKey.PEAK.value],
+            regions=translated[TranslationOutputKey.REGIONS.value],
+            cognitive=translated[TranslationOutputKey.COGNITIVE.value],
+            language=translated[TranslationOutputKey.LANGUAGE.value],
+            compare=translated[TranslationOutputKey.COMPARE.value],
+            diff=translated[TranslationOutputKey.DIFF.value],
+            normalize=translated[TranslationOutputKey.NORMALIZE.value],
+            segment=translated[TranslationOutputKey.SEGMENT.value],
+            export=translated[TranslationOutputKey.EXPORT.value],
+        )

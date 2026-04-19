@@ -19,6 +19,7 @@ from libs.dataclasses.provider_models import (
 )
 from libs.dataclasses.prediction_result import PredictionResult
 from libs.dataclasses.prepared_input import PreparedInput
+from libs.dataclasses.translation_report import TranslationReport
 from libs.dataclasses.tribe_analysis import (
     TRIBE_FSAVERAGE5_VERTEX_COUNT,
     CognitiveLoadScore,
@@ -74,6 +75,7 @@ __all__ = [
     "RegionActivations",
     "TemporalCurve",
     "TRIBE_FSAVERAGE5_VERTEX_COUNT",
+    "TranslationReport",
     "TribeConfig",
     "TribePredictions",
     "TribeSegments",

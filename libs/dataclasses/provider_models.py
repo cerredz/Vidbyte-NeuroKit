@@ -216,3 +216,35 @@ class MetaAd:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
+
+
+@dataclass(frozen=True, slots=True)
+class SlackAccount:
+    url: str | None
+    team: str | None
+    team_id: str | None
+    user: str | None
+    user_id: str | None
+    bot_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SlackFile:
+    file_id: str
+    name: str
+    title: str | None
+    mimetype: str | None
+    filetype: str | None
+    pretty_type: str | None
+    mode: str | None
+    size_bytes: int | None
+    created: int | None
+    user_id: str | None
+    is_public: bool | None
+    permalink: str | None
+    url_private: str | None
+    url_private_download: str | None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))

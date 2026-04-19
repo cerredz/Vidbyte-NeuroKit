@@ -11,10 +11,11 @@ from libs.providers.connection_store import ProviderConnectionStore
 from libs.providers.dropbox import DropboxCredentials, DropboxProvider
 from libs.providers.google_drive import GoogleDriveCredentials, GoogleDriveProvider
 from libs.providers.meta_marketing import MetaMarketingCredentials, MetaMarketingProvider
+from libs.providers.slack import SlackCredentials, SlackProvider
 from libs.providers.vimeo import VimeoCredentials, VimeoProvider
 from libs.utils.tribe_utils import to_json_safe_value
 from services.inference import TribeRunner
-from services.providers import DropboxRunner, GoogleDriveRunner, MetaMarketingRunner, VimeoRunner
+from services.providers import DropboxRunner, GoogleDriveRunner, MetaMarketingRunner, SlackRunner, VimeoRunner
 from tribe_cli.utils import run_cli
 
 
@@ -82,6 +83,7 @@ def build_provider_parser() -> argparse.ArgumentParser:
     _add_token_provider(connect_subparsers, "vimeo")
     _add_token_provider(connect_subparsers, "google-drive")
     _add_token_provider(connect_subparsers, "dropbox")
+    _add_token_provider(connect_subparsers, "slack")
     meta_connect = _add_token_provider(connect_subparsers, "meta-ads")
     meta_connect.add_argument("--account-id", required=True)
 
@@ -93,6 +95,8 @@ def build_provider_parser() -> argparse.ArgumentParser:
     drive_analyze.add_argument("--file-id", required=True)
     dropbox_analyze = _add_common_analyze_parser(analyze_subparsers, "dropbox")
     dropbox_analyze.add_argument("--path", required=True)
+    slack_analyze = _add_common_analyze_parser(analyze_subparsers, "slack")
+    slack_analyze.add_argument("--file-id", required=True)
     meta_analyze = _add_common_analyze_parser(analyze_subparsers, "meta-ads")
     meta_analyze.add_argument("--creative-id")
     meta_analyze.add_argument("--campaign-id")
@@ -107,6 +111,8 @@ def build_provider_parser() -> argparse.ArgumentParser:
     drive_compare.add_argument("--file-id", action="append", required=True)
     dropbox_compare = _add_common_compare_parser(compare_subparsers, "dropbox")
     dropbox_compare.add_argument("--path", action="append", required=True)
+    slack_compare = _add_common_compare_parser(compare_subparsers, "slack")
+    slack_compare.add_argument("--file-id", action="append", required=True)
     meta_compare = _add_common_compare_parser(compare_subparsers, "meta-ads")
     meta_compare.add_argument("--creative-id", action="append", required=True)
     meta_compare.add_argument("--account-id")
@@ -217,6 +223,9 @@ def execute_connect(args: argparse.Namespace, *, store: ProviderConnectionStore)
     elif args.provider == "dropbox":
         credentials = DropboxCredentials(token=args.token)
         provider = DropboxProvider(credentials)
+    elif args.provider == "slack":
+        credentials = SlackCredentials(token=args.token)
+        provider = SlackProvider(credentials)
     elif args.provider == "meta-ads":
         credentials = MetaMarketingCredentials(token=args.token, account_id=args.account_id)
         provider = MetaMarketingProvider(credentials)
@@ -247,6 +256,10 @@ def execute_analyze(
         credentials = resolve_dropbox_credentials(args, store)
         runner = DropboxRunner(DropboxProvider(credentials), tribe_runner=build_provider_runner(args, runner_factory))
         return runner.analyze_file(args.path, metrics=metrics, save_to=args.save_to)
+    if args.provider == "slack":
+        credentials = resolve_slack_credentials(args, store)
+        runner = SlackRunner(SlackProvider(credentials), tribe_runner=build_provider_runner(args, runner_factory))
+        return runner.analyze_file(args.file_id, metrics=metrics, save_to=args.save_to)
     if args.provider == "meta-ads":
         credentials = resolve_meta_credentials(args, store)
         runner = MetaMarketingRunner(MetaMarketingProvider(credentials), tribe_runner=build_provider_runner(args, runner_factory))
@@ -279,6 +292,11 @@ def execute_compare(
         paths = require_exactly_two(args.path, "--path")
         runner = DropboxRunner(DropboxProvider(credentials), tribe_runner=build_provider_runner(args, runner_factory))
         return runner.compare_files(paths[0], paths[1], metric=args.metric)
+    if args.provider == "slack":
+        credentials = resolve_slack_credentials(args, store)
+        file_ids = require_exactly_two(args.file_id, "--file-id")
+        runner = SlackRunner(SlackProvider(credentials), tribe_runner=build_provider_runner(args, runner_factory))
+        return runner.compare_files(file_ids[0], file_ids[1], metric=args.metric)
     if args.provider == "meta-ads":
         credentials = resolve_meta_credentials(args, store)
         creative_ids = require_exactly_two(args.creative_id, "--creative-id")
@@ -320,6 +338,10 @@ def resolve_google_drive_credentials(args: argparse.Namespace, store: ProviderCo
 
 def resolve_dropbox_credentials(args: argparse.Namespace, store: ProviderConnectionStore) -> DropboxCredentials:
     return DropboxCredentials(token=resolve_required_secret(args.token, store.load("dropbox"), "dropbox"))
+
+
+def resolve_slack_credentials(args: argparse.Namespace, store: ProviderConnectionStore) -> SlackCredentials:
+    return SlackCredentials(token=resolve_required_secret(args.token, store.load("slack"), "slack"))
 
 
 def resolve_meta_credentials(args: argparse.Namespace, store: ProviderConnectionStore) -> MetaMarketingCredentials:

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from libs.dataclasses.provider_models import DownloadedProviderAsset, DropboxAccount, DropboxEntry
+from libs.enums import ProviderBaseUrl
 from libs.providers.http_client import ProviderHttpClient
 
 from .credentials import DropboxCredentials
@@ -24,7 +25,7 @@ class DropboxProvider:
 
     def get_account(self) -> DropboxAccount:
         payload = self.http_client.post_json(
-            "https://api.dropboxapi.com/2/users/get_current_account",
+            f"{ProviderBaseUrl.DROPBOX_API.value}/users/get_current_account",
             headers=self._headers(),
         )
         name = payload.get("name", {}) if isinstance(payload.get("name"), dict) else {}
@@ -38,7 +39,7 @@ class DropboxProvider:
 
     def get_entry(self, path: str) -> DropboxEntry:
         payload = self.http_client.post_json(
-            "https://api.dropboxapi.com/2/files/get_metadata",
+            f"{ProviderBaseUrl.DROPBOX_API.value}/files/get_metadata",
             headers=self._headers(),
             body={"path": path, "include_deleted": False, "include_has_explicit_shared_members": False},
         )
@@ -46,7 +47,7 @@ class DropboxProvider:
 
     def list_folder(self, *, path: str = "", recursive: bool = False) -> tuple[DropboxEntry, ...]:
         payload = self.http_client.post_json(
-            "https://api.dropboxapi.com/2/files/list_folder",
+            f"{ProviderBaseUrl.DROPBOX_API.value}/files/list_folder",
             headers=self._headers(),
             body={"path": path, "recursive": recursive},
         )
@@ -55,7 +56,7 @@ class DropboxProvider:
         has_more = bool(payload.get("has_more"))
         while has_more and cursor:
             payload = self.http_client.post_json(
-                "https://api.dropboxapi.com/2/files/list_folder/continue",
+                f"{ProviderBaseUrl.DROPBOX_API.value}/files/list_folder/continue",
                 headers=self._headers(),
                 body={"cursor": cursor},
             )
@@ -74,7 +75,7 @@ class DropboxProvider:
         destination = self.download_dir / safe_name
         payload = self.http_client.request_bytes(
             "POST",
-            "https://content.dropboxapi.com/2/files/download",
+            f"{ProviderBaseUrl.DROPBOX_CONTENT.value}/files/download",
             headers={
                 **self._headers(),
                 "Dropbox-API-Arg": json.dumps({"path": path}),

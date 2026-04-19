@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from libs.dataclasses.provider_models import DownloadedProviderAsset, VimeoAccount, VimeoVideo, VimeoVideoFile
+from libs.enums import ProviderBaseUrl
 from libs.providers.http_client import ProviderHttpClient
 
 from .credentials import VimeoCredentials
@@ -24,7 +25,7 @@ class VimeoProvider:
         self.download_dir = Path(download_dir or Path.cwd() / "cache" / "providers" / "vimeo").expanduser().resolve()
 
     def get_account(self) -> VimeoAccount:
-        payload = self.http_client.get_json("https://api.vimeo.com/me", headers=self._headers())
+        payload = self.http_client.get_json(f"{ProviderBaseUrl.VIMEO_API.value}/me", headers=self._headers())
         return VimeoAccount(
             user_id=str(payload.get("uri", "")).split("/")[-1],
             name=str(payload.get("name", "")),
@@ -34,7 +35,7 @@ class VimeoProvider:
 
     def get_video(self, video_id: str) -> VimeoVideo:
         payload = self.http_client.get_json(
-            f"https://api.vimeo.com/videos/{video_id}",
+            f"{ProviderBaseUrl.VIMEO_API.value}/videos/{video_id}",
             headers=self._headers(),
             params={
                 "fields": "uri,name,description,link,duration,width,height,created_time,modified_time,files,download,pictures",
@@ -64,7 +65,7 @@ class VimeoProvider:
 
     def list_videos(self, *, page: int = 1, per_page: int = 25) -> tuple[VimeoVideo, ...]:
         payload = self.http_client.get_json(
-            "https://api.vimeo.com/me/videos",
+            f"{ProviderBaseUrl.VIMEO_API.value}/me/videos",
             headers=self._headers(),
             params={
                 "page": page,

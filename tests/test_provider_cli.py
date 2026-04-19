@@ -32,6 +32,18 @@ class FakeMetaRunner:
         return {"campaign_id": campaign_id, "metrics": metrics, "sort_by": sort_by}
 
 
+class FakeSlackProvider:
+    def __init__(self, credentials) -> None:
+        self.credentials = credentials
+
+
+class FakeSlackRunner:
+    def __init__(self, provider, tribe_runner=None) -> None:
+        self.provider = provider
+        self.tribe_runner = tribe_runner
+
+    def analyze_file(self, file_id: str, *, metrics=None, save_to=None):
+        return {"file_id": file_id, "metrics": metrics, "save_to": save_to}
 class FakeTemporalResult:
     def __init__(self, scores: tuple[float, ...]) -> None:
         self.scores = scores
@@ -99,6 +111,29 @@ def test_analyze_meta_ads_uses_stored_credentials(monkeypatch, tmp_path: Path) -
     }
 
 
+def test_analyze_slack_uses_stored_credentials(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(cli, "SlackProvider", FakeSlackProvider)
+    monkeypatch.setattr(cli, "SlackRunner", FakeSlackRunner)
+    store = ProviderConnectionStore(tmp_path / "connections.json")
+    store.save("slack", {"token": "stored-token"})
+    args = cli.build_provider_parser().parse_args(
+        [
+            "analyze",
+            "slack",
+            "--file-id",
+            "F123",
+            "--metrics",
+            "engagement,peak",
+        ]
+    )
+
+    response = cli.execute_provider_request(args, connection_store=store, runner_factory=lambda config=None: object())
+
+    assert response == {
+        "file_id": "F123",
+        "metrics": ["engagement", "peak"],
+        "save_to": None,
+    }
 def test_provider_runner_batch_analysis_sorts_by_metric(tmp_path: Path) -> None:
     runner = DummyRunner(provider=DummyProvider(), tribe_runner=FakeTribeRunner(tmp_path))
     asset_a = DownloadedProviderAsset(provider="dummy", remote_id="a", name="A", local_path=tmp_path / "a.mp4")

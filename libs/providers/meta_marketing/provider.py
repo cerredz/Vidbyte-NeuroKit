@@ -13,6 +13,7 @@ from libs.dataclasses.provider_models import (
     MetaCreative,
     MetaCreativeAsset,
 )
+from libs.enums import ProviderBaseUrl
 from libs.providers.http_client import ProviderHttpClient
 
 from .credentials import MetaMarketingCredentials
@@ -110,7 +111,11 @@ class MetaMarketingProvider:
         return tuple(items)
 
     def _get(self, path: str, **params: Any) -> dict[str, Any]:
-        return self.http_client.get_json(f"https://graph.facebook.com/{self.api_version}/{path}", headers=self._headers(), params=params)
+        return self.http_client.get_json(
+            f"{ProviderBaseUrl.META_GRAPH_API.value}/{self.api_version}/{path}",
+            headers=self._headers(),
+            params=params,
+        )
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.credentials.token}"}

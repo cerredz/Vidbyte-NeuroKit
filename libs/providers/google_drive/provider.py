@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from libs.dataclasses.provider_models import DownloadedProviderAsset, GoogleDriveAccount, GoogleDriveFile
+from libs.enums import ProviderBaseUrl
 from libs.providers.http_client import ProviderHttpClient
 
 from .credentials import GoogleDriveCredentials
@@ -41,7 +42,7 @@ class GoogleDriveProvider:
 
     def get_account(self) -> GoogleDriveAccount:
         payload = self.http_client.get_json(
-            "https://www.googleapis.com/drive/v3/about",
+            f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/about",
             headers=self._headers(),
             params={"fields": "user,storageQuota"},
         )
@@ -57,7 +58,7 @@ class GoogleDriveProvider:
 
     def get_file(self, file_id: str) -> GoogleDriveFile:
         payload = self.http_client.get_json(
-            f"https://www.googleapis.com/drive/v3/files/{file_id}",
+            f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/files/{file_id}",
             headers=self._headers(),
             params={"fields": GOOGLE_DRIVE_FIELDS, "supportsAllDrives": "true"},
         )
@@ -65,7 +66,7 @@ class GoogleDriveProvider:
 
     def list_files(self, *, query: str | None = None, page_size: int = 100) -> tuple[GoogleDriveFile, ...]:
         payload = self.http_client.get_json(
-            "https://www.googleapis.com/drive/v3/files",
+            f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/files",
             headers=self._headers(),
             params={
                 "fields": f"files({GOOGLE_DRIVE_FIELDS})",
@@ -88,27 +89,27 @@ class GoogleDriveProvider:
             destination = self.download_dir / f"{self._safe_name(file.name)}.txt"
             payload = self.http_client.request_bytes(
                 "GET",
-                f"https://www.googleapis.com/drive/v3/files/{file.file_id}/export",
+                f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/files/{file.file_id}/export",
                 headers=self._headers(),
                 params={"mimeType": "text/plain"},
             )
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(payload)
             mime_type = "text/plain"
-            source_url = f"https://www.googleapis.com/drive/v3/files/{file.file_id}/export"
+            source_url = f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/files/{file.file_id}/export"
         else:
             if file.can_download is False:
                 raise ValueError(f"Google Drive file {file.file_id} is not downloadable for the connected account.")
             suffix = self._infer_suffix(file)
             destination = self.download_dir / f"{self._safe_name(file.name)}{suffix}"
             self.http_client.download(
-                f"https://www.googleapis.com/drive/v3/files/{file.file_id}",
+                f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/files/{file.file_id}",
                 destination,
                 headers=self._headers(),
                 params={"alt": "media", "supportsAllDrives": "true"},
             )
             mime_type = file.mime_type
-            source_url = f"https://www.googleapis.com/drive/v3/files/{file.file_id}?alt=media"
+            source_url = f"{ProviderBaseUrl.GOOGLE_DRIVE_API.value}/files/{file.file_id}?alt=media"
         return DownloadedProviderAsset(
             provider="google-drive",
             remote_id=file.file_id,

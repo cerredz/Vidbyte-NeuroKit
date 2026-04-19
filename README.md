@@ -69,7 +69,11 @@ saved_to = runner.save_output(result)
 
 ## CLI
 
-The CLI is JSON-in / JSON-out:
+The repo ships three compatible CLI entrypoints:
+
+- `vidbyte-neuro-kit` for the task/action wrapper on top of `TribeRunner`
+- `tribe-cli` for the legacy JSON-in / JSON-out runner commands
+- `neurokit` for provider connection, analysis, and comparison workflows
 
 ```bash
 vidbyte-neuro-kit predict response --json "{\"input_path\": \"path/to/stimulus.mp4\"}"
@@ -77,6 +81,14 @@ vidbyte-neuro-kit predict response --json "{\"input_path\": \"path/to/stimulus.m
 
 ```bash
 echo "{\"input_path\": \"path/to/stimulus.mp4\"}" | vidbyte-neuro-kit inspect events
+```
+
+```bash
+tribe-cli run --json "{\"input_path\": \"path/to/stimulus.mp4\"}"
+```
+
+```bash
+neurokit analyze vimeo --video-id 123 --token "$VIMEO_TOKEN"
 ```
 
 ## Output bundle

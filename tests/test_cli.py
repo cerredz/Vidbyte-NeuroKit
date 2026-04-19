@@ -74,8 +74,8 @@ def test_execute_request_run_forwards_format() -> None:
     runner = FakeCliRunner()
 
     execute_request(
-        "run",
-        {"input_path": "sample.wav", "format": "tsv"},
+        "predict-response",
+        {CliPayloadKey.INPUT_PATH.value: "sample.wav", CliPayloadKey.FORMAT.value: "tsv"},
         runner_factory=lambda config=None: runner,
     )
 
@@ -98,8 +98,12 @@ def test_execute_request_save_output_forwards_format() -> None:
     runner = FakeCliRunner()
 
     execute_request(
-        "save-output",
-        {"input_path": "sample.wav", "save_to": "bundle", "format": "bids_events"},
+        "save-bundle",
+        {
+            CliPayloadKey.INPUT_PATH.value: "sample.wav",
+            CliPayloadKey.SAVE_TO.value: "bundle",
+            CliPayloadKey.FORMAT.value: "bids_events",
+        },
         runner_factory=lambda config=None: runner,
     )
 

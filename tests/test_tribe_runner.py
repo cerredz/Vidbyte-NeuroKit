@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,8 @@ import pandas as pd
 from libs.dataclasses import TRIBE_FSAVERAGE5_VERTEX_COUNT, TribeConfig, TribePredictions
 from libs.enums import TranslationOutputKey
 from libs.utils import TribeRunnerUtils, build_tribe_segments
+import services.inference.inference_workflow_coordinator as workflow_module
+from services.inference.inference_workflow_coordinator import InferenceWorkflowCoordinator
 from services.inference import TribeRunner
 from tribe_setup.models import PredictionResult, TranslationReport
 
@@ -326,3 +329,78 @@ def test_runner_translate_fails_fast_on_invalid_key(tmp_path: Path) -> None:
         assert "Unsupported translation key" in str(exc)
     else:  # pragma: no cover - defensive branch
         raise AssertionError("Expected ValueError")
+
+
+def test_workflow_resolves_windows_repo_id_to_local_snapshot(tmp_path: Path, monkeypatch) -> None:
+    import huggingface_hub
+
+    workflow = InferenceWorkflowCoordinator(
+        config=TribeConfig(
+            model_name="facebook/tribev2",
+            cache_dir=tmp_path / "cache",
+            output_dir=tmp_path / "outputs",
+        )
+    )
+
+    monkeypatch.setattr(workflow_module.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        huggingface_hub,
+        "snapshot_download",
+        lambda *, repo_id, local_dir: str(Path(local_dir)),
+    )
+
+    resolved = workflow._resolve_model_source("facebook/tribev2")
+
+    assert resolved == (tmp_path / "cache" / "hf-facebook-tribev2").resolve()
+
+
+def test_workflow_get_transcript_from_audio_uses_cpu_safe_whisperx_command(tmp_path: Path, monkeypatch) -> None:
+    wav_path = tmp_path / "sample.wav"
+    wav_path.write_bytes(b"audio")
+    observed: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        InferenceWorkflowCoordinator,
+        "_resolve_uvx_executable",
+        staticmethod(lambda: Path("C:/tools/uvx.exe")),
+    )
+    monkeypatch.setattr(
+        InferenceWorkflowCoordinator,
+        "_resolve_whisperx_runtime",
+        staticmethod(lambda: ("cpu", "float32", "small.en", 4)),
+    )
+
+    def fake_run(command, capture_output, text, env):
+        observed["command"] = command
+        output_dir = Path(command[command.index("--output_dir") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "sample.json").write_text(
+            json.dumps(
+                {
+                    "segments": [
+                        {
+                            "text": "hello world",
+                            "words": [
+                                {"word": "hello", "start": 0.0, "end": 0.5},
+                                {"word": "world", "start": 0.5, "end": 1.0},
+                            ],
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(workflow_module.subprocess, "run", fake_run)
+
+    transcript = InferenceWorkflowCoordinator._get_transcript_from_audio(wav_path, "english")
+
+    assert list(transcript["text"]) == ["hello", "world"]
+    command = observed["command"]
+    assert Path(command[0]) == Path("C:/tools/uvx.exe")
+    assert command[1:5] == ["whisperx", str(wav_path), "--model", "small.en"]
+    assert "--compute_type" in command
+    assert command[command.index("--compute_type") + 1] == "float32"
+    assert "--batch_size" in command
+    assert command[command.index("--batch_size") + 1] == "4"

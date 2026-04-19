@@ -1,3 +1,4 @@
+from libs.dataclasses.format_request import FormatRequest
 from libs.dataclasses.provider_models import (
     DownloadedProviderAsset,
     DropboxAccount,
@@ -53,6 +54,7 @@ __all__ = [
     "EngagementWindow",
     "ExportArtifact",
     "ExportPayload",
+    "FormatRequest",
     "GoogleDriveAccount",
     "GoogleDriveFile",
     "LanguageProcessingScore",

@@ -41,6 +41,7 @@ class CliPayloadKey(StrEnum):
     COUNT = "count"
     ERROR = "error"
     EVENTS = "events"
+    FORMAT = "format"
     INCLUDE_BRAIN_STIMULUS_CSV = "include_brain_stimulus_csv"
     INPUT_KIND = "input_kind"
     INPUT_PATH = "input_path"
@@ -57,6 +58,7 @@ class CliPayloadKey(StrEnum):
 class CliParserValue(StrEnum):
     COMMAND_ACTION_ARG = "action"
     COMMAND_GROUP_ARG = "task"
+    FORMAT_ARG = "--format"
     INLINE_JSON_ARG = "--json"
     JSON_PAYLOAD_DEST = "json_payload"
     PROGRAM_NAME = "vidbyte-neuro-kit"
@@ -76,6 +78,8 @@ def run_cli(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     payload = load_payload(args.json_payload)
+    if args.format_name is not None:
+        payload[CliPayloadKey.FORMAT.value] = args.format_name
     command = resolve_command(args.task, args.action)
 
     try:
@@ -93,6 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(CliParserValue.COMMAND_GROUP_ARG.value, choices=sorted(group.value for group in CliCommandGroup))
     parser.add_argument(CliParserValue.COMMAND_ACTION_ARG.value, choices=sorted(action.value for action in CliCommandAction))
     parser.add_argument(CliParserValue.INLINE_JSON_ARG.value, dest=CliParserValue.JSON_PAYLOAD_DEST.value, help="Inline JSON payload. If omitted, stdin is used when piped.")
+    parser.add_argument(CliParserValue.FORMAT_ARG.value, dest="format_name", help="Optional formatter target such as csv, tsv, bids, or bids_events.")
     return parser
 
 
@@ -127,6 +132,7 @@ def execute_request(command: str, payload: dict[str, Any], runner_factory: Calla
                 payload.get(CliPayloadKey.INPUT_PATH.value),
                 verbose=payload.get(CliPayloadKey.VERBOSE.value),
                 save_to=payload.get(CliPayloadKey.SAVE_TO.value),
+                format=payload.get(CliPayloadKey.FORMAT.value),
             ),
             runner,
         )
@@ -140,11 +146,16 @@ def execute_request(command: str, payload: dict[str, Any], runner_factory: Calla
         brain_stimulus_frame = runner.get_brain_stimulus_dataframe(payload.get(CliPayloadKey.INPUT_PATH.value), verbose=payload.get(CliPayloadKey.VERBOSE.value))
         return {CliPayloadKey.BRAIN_STIMULUS.value: brain_stimulus_frame.to_dict(orient="records"), CliPayloadKey.COUNT.value: len(brain_stimulus_frame)}
     if command == CliCommand.SAVE_BUNDLE.value:
-        result = runner.run(payload.get(CliPayloadKey.INPUT_PATH.value), verbose=payload.get(CliPayloadKey.VERBOSE.value))
+        result = runner.run(
+            payload.get(CliPayloadKey.INPUT_PATH.value),
+            verbose=payload.get(CliPayloadKey.VERBOSE.value),
+            format=payload.get(CliPayloadKey.FORMAT.value),
+        )
         saved_path = runner.save_output(
             result,
             output_path=payload.get(CliPayloadKey.SAVE_TO.value),
             include_brain_stimulus_csv=payload.get(CliPayloadKey.INCLUDE_BRAIN_STIMULUS_CSV.value),
+            format=payload.get(CliPayloadKey.FORMAT.value),
         )
         return {CliPayloadKey.SAVED_TO.value: str(saved_path)}
     raise ValueError(f"Unsupported command: {command}")

@@ -2,10 +2,12 @@ from tribe_setup.models import (
     CognitiveLoadScore,
     ComparisonMetric,
     ComparisonResult,
+    DataFormat,
     EngagementSegmentation,
     ExportArtifact,
     ExportFormat,
     ExportPayload,
+    FormatRequest,
     InputKind,
     LanguageProcessingScore,
     NormalizedPredictions,
@@ -15,6 +17,7 @@ from tribe_setup.models import (
     PreparedInput,
     RegionActivations,
     TemporalCurve,
+    TranslationReport,
     TranslationOutputKey,
     TribeConfig,
     TribePredictions,
@@ -26,10 +29,13 @@ __all__ = [
     "ComparisonMetric",
     "ComparisonResult",
     "DataInput",
+    "DataFormat",
     "EngagementSegmentation",
     "ExportArtifact",
     "ExportFormat",
     "ExportPayload",
+    "FormatRequest",
+    "Formatter",
     "InputKind",
     "LanguageProcessingScore",
     "NormalizedPredictions",
@@ -39,6 +45,7 @@ __all__ = [
     "PreparedInput",
     "RegionActivations",
     "TemporalCurve",
+    "TranslationReport",
     "TranslationOutputKey",
     "TribeConfig",
     "TribePredictions",
@@ -61,4 +68,8 @@ def __getattr__(name: str):
         from libs.utils import TribeRunnerUtils
 
         return TribeRunnerUtils
+    if name == "Formatter":
+        from libs.utils import Formatter
+
+        return Formatter
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

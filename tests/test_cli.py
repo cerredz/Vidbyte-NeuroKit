@@ -10,9 +10,10 @@ class FakeCliRunner:
     def __init__(self, config=None) -> None:
         self.config = config
         self.run_calls: list[dict[str, object]] = []
+        self.save_output_calls: list[dict[str, object]] = []
 
-    def run(self, input_path=None, *, verbose=None, save_to=None):
-        self.run_calls.append({"input_path": input_path, "verbose": verbose, "save_to": save_to})
+    def run(self, input_path=None, *, verbose=None, save_to=None, format=None):
+        self.run_calls.append({"input_path": input_path, "verbose": verbose, "save_to": save_to, "format": format})
         return FakePredictionResult(input_path or "env.wav")
 
     def get_event_dataframe(self, input_path):
@@ -24,7 +25,15 @@ class FakeCliRunner:
     def get_brain_stimulus_dataframe(self, input_path=None, *, verbose=None):
         return FakePredictionResult(input_path or "env.wav").brain_stimulus_frame()
 
-    def save_output(self, result, output_path=None, *, include_brain_stimulus_csv=None):
+    def save_output(self, result, output_path=None, *, include_brain_stimulus_csv=None, format=None):
+        self.save_output_calls.append(
+            {
+                "result": result,
+                "output_path": output_path,
+                "include_brain_stimulus_csv": include_brain_stimulus_csv,
+                "format": format,
+            }
+        )
         return Path(output_path or "outputs")
 
 
@@ -61,6 +70,20 @@ def test_execute_request_run_returns_json_safe_payload() -> None:
     assert response["brain_stimulus_shape"] == [1, 2]
 
 
+def test_execute_request_run_forwards_format() -> None:
+    runner = FakeCliRunner()
+
+    execute_request(
+        "run",
+        {"input_path": "sample.wav", "format": "tsv"},
+        runner_factory=lambda config=None: runner,
+    )
+
+    assert runner.run_calls == [
+        {"input_path": "sample.wav", "verbose": None, "save_to": None, "format": "tsv"}
+    ]
+
+
 def test_execute_request_save_output_returns_path() -> None:
     response = execute_request(
         "save-output",
@@ -69,6 +92,21 @@ def test_execute_request_save_output_returns_path() -> None:
     )
 
     assert response == {"saved_to": str(Path("bundle"))}
+
+
+def test_execute_request_save_output_forwards_format() -> None:
+    runner = FakeCliRunner()
+
+    execute_request(
+        "save-output",
+        {"input_path": "sample.wav", "save_to": "bundle", "format": "bids_events"},
+        runner_factory=lambda config=None: runner,
+    )
+
+    assert runner.run_calls == [
+        {"input_path": "sample.wav", "verbose": None, "save_to": None, "format": "bids_events"}
+    ]
+    assert runner.save_output_calls[0]["format"] == "bids_events"
 
 
 def test_load_payload_requires_json_object() -> None:

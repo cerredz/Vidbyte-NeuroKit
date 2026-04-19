@@ -6,6 +6,7 @@ from libs.dataclasses import (
     EngagementSegmentation,
     ExportArtifact,
     ExportPayload,
+    FormatRequest,
     LanguageProcessingScore,
     NormalizedPredictions,
     PeakMoments,
@@ -14,20 +15,23 @@ from libs.dataclasses import (
     PreparedInput,
     RegionActivations,
     TemporalCurve,
+    TranslationReport,
     TribeConfig,
     TribePredictions,
     TribeSegments,
 )
-from libs.enums import ComparisonMetric, ExportFormat, InputKind, TranslationOutputKey
+from libs.enums import ComparisonMetric, DataFormat, ExportFormat, InputKind, TranslationOutputKey
 
 __all__ = [
     "CognitiveLoadScore",
     "ComparisonMetric",
     "ComparisonResult",
+    "DataFormat",
     "EngagementSegmentation",
     "ExportArtifact",
     "ExportFormat",
     "ExportPayload",
+    "FormatRequest",
     "InputKind",
     "LanguageProcessingScore",
     "NormalizedPredictions",
@@ -37,6 +41,7 @@ __all__ = [
     "PreparedInput",
     "RegionActivations",
     "TemporalCurve",
+    "TranslationReport",
     "TranslationOutputKey",
     "TribeConfig",
     "TribePredictions",

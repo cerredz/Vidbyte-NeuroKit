@@ -16,6 +16,7 @@ from libs.providers.vimeo import VimeoCredentials, VimeoProvider
 from libs.utils.tribe_utils import to_json_safe_value
 from services.inference import TribeRunner
 from services.providers import DropboxRunner, GoogleDriveRunner, MetaMarketingRunner, SlackRunner, VimeoRunner
+from tribe_cli.utils import run_cli
 
 
 LEGACY_COMMANDS = {
@@ -30,14 +31,17 @@ PROVIDER_COMMANDS = {"connect", "analyze", "compare"}
 
 def main(argv: list[str] | None = None) -> int:
     raw_args = list(argv if argv is not None else sys.argv[1:])
+    if raw_args and raw_args[0] in LEGACY_COMMANDS:
+        return _run_legacy_cli(raw_args)
     if raw_args and raw_args[0] in PROVIDER_COMMANDS:
         return _run_provider_cli(raw_args)
+    return run_cli(raw_args)
 
-    parser = build_parser()
-    args = parser.parse_args(raw_args)
+
+def _run_legacy_cli(argv: list[str]) -> int:
+    parser = build_legacy_parser()
+    args = parser.parse_args(argv)
     payload = load_payload(args.json_payload)
-    if args.format_name is not None:
-        payload["format"] = args.format_name
 
     try:
         response = execute_request(args.command, payload)
@@ -63,16 +67,15 @@ def _run_provider_cli(argv: list[str]) -> int:
     return 0
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_legacy_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tribe-cli")
     parser.add_argument("command", choices=sorted(LEGACY_COMMANDS))
     parser.add_argument("--json", dest="json_payload", help="Inline JSON payload. If omitted, stdin is used when piped.")
-    parser.add_argument("--format", dest="format_name", help="Optional formatter target such as csv, tsv, bids, or bids_events.")
     return parser
 
 
 def build_provider_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="tribe-cli")
+    parser = argparse.ArgumentParser(prog="neurokit")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     connect_parser = subparsers.add_parser("connect")
@@ -171,7 +174,6 @@ def execute_request(command: str, payload: dict[str, Any], runner_factory: Calla
                 payload.get("input_path"),
                 verbose=payload.get("verbose"),
                 save_to=payload.get("save_to"),
-                format=payload.get("format"),
             ),
             runner,
         )
@@ -185,12 +187,11 @@ def execute_request(command: str, payload: dict[str, Any], runner_factory: Calla
         brain_stimulus_frame = runner.get_brain_stimulus_dataframe(payload.get("input_path"), verbose=payload.get("verbose"))
         return {"brain_stimulus": brain_stimulus_frame.to_dict(orient="records"), "count": len(brain_stimulus_frame)}
     if command == "save-output":
-        result = runner.run(payload.get("input_path"), verbose=payload.get("verbose"), format=payload.get("format"))
+        result = runner.run(payload.get("input_path"), verbose=payload.get("verbose"))
         saved_path = runner.save_output(
             result,
             output_path=payload.get("save_to"),
             include_brain_stimulus_csv=payload.get("include_brain_stimulus_csv"),
-            format=payload.get("format"),
         )
         return {"saved_to": str(saved_path)}
     raise ValueError(f"Unsupported command: {command}")
@@ -358,7 +359,7 @@ def resolve_required_secret(explicit_value: str | None, stored: dict[str, Any] |
     stored_payload = stored or {}
     token = stored_payload.get("token")
     if not isinstance(token, str) or not token:
-        raise ValueError(f"No stored credentials found for {provider_name}. Run `tribe-cli connect {provider_name}` or pass --token.")
+        raise ValueError(f"No stored credentials found for {provider_name}. Run `neurokit connect {provider_name}` or pass --token.")
     return token
 
 

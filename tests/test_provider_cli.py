@@ -44,8 +44,6 @@ class FakeSlackRunner:
 
     def analyze_file(self, file_id: str, *, metrics=None, save_to=None):
         return {"file_id": file_id, "metrics": metrics, "save_to": save_to}
-
-
 class FakeTemporalResult:
     def __init__(self, scores: tuple[float, ...]) -> None:
         self.scores = scores
@@ -136,8 +134,6 @@ def test_analyze_slack_uses_stored_credentials(monkeypatch, tmp_path: Path) -> N
         "metrics": ["engagement", "peak"],
         "save_to": None,
     }
-
-
 def test_provider_runner_batch_analysis_sorts_by_metric(tmp_path: Path) -> None:
     runner = DummyRunner(provider=DummyProvider(), tribe_runner=FakeTribeRunner(tmp_path))
     asset_a = DownloadedProviderAsset(provider="dummy", remote_id="a", name="A", local_path=tmp_path / "a.mp4")

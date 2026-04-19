@@ -96,6 +96,29 @@ def test_runner_save_output_writes_bundle(tmp_path: Path) -> None:
     assert json.loads((output_path / "metadata.json").read_text(encoding="utf-8"))["brain_stimulus_shape"] == [2, TRIBE_FSAVERAGE5_VERTEX_COUNT]
 
 
+def test_runner_save_output_writes_requested_table_format(tmp_path: Path) -> None:
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"audio")
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=FakeTribeBackend())
+    result = runner.run(audio_path, verbose=False)
+
+    output_path = runner.save_output(result, output_path=tmp_path / "formatted-output", format="tsv")
+
+    assert (output_path / "formatted" / "brain_stimulus_formatted.tsv").exists()
+
+
+def test_runner_save_output_writes_requested_bids_export(tmp_path: Path) -> None:
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"audio")
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=FakeTribeBackend())
+    result = runner.run(audio_path, verbose=False)
+
+    output_path = runner.save_output(result, output_path=tmp_path / "bids-output", format="bids")
+
+    assert (output_path / "formatted" / "bids" / "dataset_description.json").exists()
+    assert (output_path / "formatted" / "bids" / "sub-01_task-tribe_events.tsv").exists()
+
+
 def test_runner_fails_fast_on_invalid_input(tmp_path: Path) -> None:
     runner = TribeRunner(config=build_runner_config(tmp_path), backend=FakeTribeBackend())
 
@@ -105,6 +128,19 @@ def test_runner_fails_fast_on_invalid_input(tmp_path: Path) -> None:
         pass
     else:  # pragma: no cover - defensive branch
         raise AssertionError("Expected FileNotFoundError")
+
+
+def test_runner_rejects_invalid_requested_format(tmp_path: Path) -> None:
+    audio_path = tmp_path / "sample.wav"
+    audio_path.write_bytes(b"audio")
+    runner = TribeRunner(config=build_runner_config(tmp_path), backend=FakeTribeBackend())
+
+    try:
+        runner.run(audio_path, verbose=False, format="not-a-real-format")
+    except ValueError as exc:
+        assert "Unsupported format" in str(exc)
+    else:  # pragma: no cover - defensive branch
+        raise AssertionError("Expected ValueError")
 
 
 def test_runner_uses_yaml_defaults_when_config_is_not_provided(tmp_path: Path, monkeypatch) -> None:
